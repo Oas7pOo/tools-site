@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>伪装图生成器</title>
+</head>
+<body>
+  <h2>伪装文件生成（PNG + ZIP）</h2>
+  <input type="file" id="pngInput" accept=".png"><br>
+  <input type="file" id="zipInput" accept=".zip"><br><br>
+  <button onclick="generateFakeImage()">生成伪装图并下载</button>
+
+  <script>
+    async function generateFakeImage() {
+      const pngFile = document.getElementById('pngInput').files[0];
+      const zipFile = document.getElementById('zipInput').files[0];
+
+      if (!pngFile || !zipFile) {
+        alert("请上传PNG和ZIP文件");
+        return;
+      }
+
+      const pngBuffer = await pngFile.arrayBuffer();
+      const zipBuffer = await zipFile.arrayBuffer();
+
+      // 合并两个 ArrayBuffer
+      const totalLength = pngBuffer.byteLength + zipBuffer.byteLength;
+      const mergedBuffer = new Uint8Array(totalLength);
+      mergedBuffer.set(new Uint8Array(pngBuffer), 0);
+      mergedBuffer.set(new Uint8Array(zipBuffer), pngBuffer.byteLength);
+
+      // 创建 Blob 并下载
+      const blob = new Blob([mergedBuffer], { type: 'image/png' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = '伪装图.png';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+  </script>
+</body>
+</html>
