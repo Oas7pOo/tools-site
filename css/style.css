@@ -5,6 +5,10 @@
   box-sizing: border-box;
 }
 
+html, body {
+  height: 100%;
+}
+
 body {
   font-family: Arial, Helvetica, sans-serif;
   line-height: 2;
@@ -26,13 +30,17 @@ footer p {
 
 /* 主内容区域整体容器 */
 .main-wrapper {
-  margin-left: 260px;        /* 左侧导航宽度+留白 */
-  width: calc(100% - 260px);   /* 占满除去左侧导航外的剩余宽度 */
+  margin-left: 260px;
+  width: calc(100% - 260px);
+  min-height: 100vh;      /* 设置最小高度为视窗高度 */
+  display: flex;          /* 关键 */
+  flex-direction: column; /* 关键：竖直排列header、content、footer */
 }
 
 /* 外层容器 */
 .wrapper {
   display: flex;
+  min-height: 100vh;
 }
 
 /* 左侧导航栏 */
@@ -102,9 +110,9 @@ a.active {
 
 /* 主内容区域 */
 .content {
+  margin-right: 260px;
   padding: 20px;
   flex: 1;
-  background-color: #fff;
 }
 
 /* 正文多栏容器（仅针对正文内容） */
@@ -156,7 +164,7 @@ footer {
   color: #fff;
   text-align: center;
   padding: 10px;
-  margin-top: 20px;
+  margin-top: auto;
 }
 
 /* 响应式调整：屏幕宽度较小时，导航栏显示在顶部 */
@@ -171,5 +179,9 @@ footer {
   }
   .content {
     margin-left: 0;
+  }
+  .main-wrapper {
+    margin-left: 0;
+    width: 100%;
   }
 }

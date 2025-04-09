@@ -8,8 +8,22 @@
   <link rel="icon" href="{{ site.baseurl }}/ico.svg" type="image/svg+xml">
   <!-- 引入 CSS -->
   <link rel="stylesheet" href="{{ site.baseurl }}/css/style.css">
+  <style>
+    /* 全屏 canvas 固定于背景 */
+    #bgCanvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: -1;
+    }
+  </style>
 </head>
 <body>
+  <!-- 全屏背景 canvas -->
+  <canvas id="bgCanvas"></canvas>
+
   <div class="wrapper">
     <!-- 左侧导航栏 -->
     <nav class="sidebar">
@@ -21,7 +35,6 @@
           <span>工具</span>
           <ul class="sub-nav">
             <li><a href="{{ site.baseurl }}/tools/img&zip.html">图片+ZIP 生成器</a></li>
-            <!-- 如果有其它工具页面，继续添加 -->
           </ul>
         </li>
         <!-- 博客分组 -->
@@ -29,7 +42,6 @@
           <span>博客</span>
           <ul class="sub-nav">
             <li><a href="{{ site.baseurl }}/blogs/introduction.html">测试页</a></li>
-            <!-- 如果有其它博客页面，继续添加 -->
           </ul>
         </li>
       </ul>
@@ -43,10 +55,7 @@
       </header>
 
       <div class="content">
-        <!-- 新增的多栏正文容器，用于正文内容的两栏排版 -->
-        <div class="main-text">
-          {{ content }}
-        </div>
+        {{ content }}
       </div>
 
       <footer>
@@ -54,8 +63,108 @@
       </footer>
     </div>
   </div>
-  
+
   <!-- 引入公共 JavaScript，如果有的话 -->
   <script src="{{ site.baseurl }}/js/common.js"></script>
+
+  <!-- 以下脚本用于绘制全屏背景动画，带有混合色彩和鼠标扰动效果 -->
+  <script>
+    (function() {
+      const canvas = document.getElementById('bgCanvas');
+      const ctx = canvas.getContext('2d');
+
+      // 设置 canvas 尺寸覆盖全屏
+      function resizeCanvas() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+      }
+      window.addEventListener('resize', resizeCanvas);
+      resizeCanvas();
+
+      // 保存鼠标信息，用于局部扰动
+      let mouseX = -100, mouseY = -100, rippleIntensity = 0;
+      window.addEventListener("mousemove", function(e) {
+        mouseX = e.clientX;
+        mouseY = e.clientY;
+        rippleIntensity = 8; // 鼠标移动时给予扰动初始强度
+      });
+
+      let time = 0;
+
+      // 参数设置
+      const amplitude = 1;          // 正弦波基础振幅
+      const frequency = 0.005;         // 基础波动频率
+      const verticalSpacing = 10;      // 每条水平线间隔
+      const turbulenceAmplitude = 50;   // 基础湍流扰动幅度
+
+      // 简单湍流函数，产生混沌扰动
+      function turbulence(x, y, t) {
+        return (Math.sin(x * 0.01 + t * 0.1) + Math.sin(y * 0.02 + t * 0.1)) / 2 * turbulenceAmplitude;
+      }
+
+      function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // 使用 "lighter" 模式使颜色混合
+        ctx.globalCompositeOperation = 'lighter';
+
+        // 遍历每条水平线
+        for (let y = 0; y < canvas.height; y += verticalSpacing) {
+          ctx.beginPath();
+          // 创建一个沿水平线的多色线性渐变
+          let grad = ctx.createLinearGradient(0, y, canvas.width, y);
+          grad.addColorStop(0, `hsl(${(time + y * 0.1) % 360}, 80%, 50%)`);
+          grad.addColorStop(0.5, `hsl(${(time + y * 0.1 + 60) % 360}, 80%, 50%)`);
+          grad.addColorStop(1, `hsl(${(time + y * 0.1 + 120) % 360}, 80%, 50%)`);
+          ctx.strokeStyle = grad;
+
+          // 绘制波纹线
+          for (let x = 0; x <= canvas.width; x++) {
+            let baseOffset = Math.sin(x * frequency + time + y * 0.005) * amplitude;
+            let turb = turbulence(x, y, time);
+            // 计算鼠标局部扰动效果
+            const dx = x - mouseX;
+            const dy = y - mouseY;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            let ripple = 0;
+            const rippleRadius = 100; // 鼠标影响半径
+            if (dist < rippleRadius) {
+              let decay = 1 - dist / rippleRadius;
+              ripple = decay * rippleIntensity * Math.sin(x * 0.05 + time * 0.2);
+            }
+            let offset = baseOffset + turb + ripple;
+            if (x === 0) {
+              ctx.moveTo(x, y + offset);
+            } else {
+              ctx.lineTo(x, y + offset);
+            }
+          }
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
+
+        // 恢复默认合成模式
+        ctx.globalCompositeOperation = 'source-over';
+
+        // 叠加水平渐变遮罩：左侧完全透明，右侧50%不透明
+        ctx.save();
+        ctx.globalCompositeOperation = 'destination-in';
+        let mask = ctx.createLinearGradient(0, 0, canvas.width, 0);
+        mask.addColorStop(0, 'rgba(0,0,0,0)');       // 左侧：全透明
+        mask.addColorStop(1, 'rgba(0,0,0,0.25)');     // 右侧：50%不透明
+        ctx.fillStyle = mask;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.restore();
+
+        // 衰减鼠标扰动强度，使扰动逐渐消失
+        rippleIntensity *= 0.98;
+
+        time += 0.02;  // 平缓时间步长
+        requestAnimationFrame(draw);
+      }
+
+      draw();
+    })();
+  </script>
 </body>
 </html>
