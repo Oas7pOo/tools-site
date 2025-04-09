@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ page.title | default: "冰兔的工具站" }}</title>
+  <!-- 引入站点标志（favicon） -->
+  <link rel="icon" href="{{ site.baseurl }}/ico.svg" type="image/svg+xml">
+  <!-- 引入 CSS -->
+  <link rel="stylesheet" href="{{ site.baseurl }}/css/style.css">
+</head>
+<body>
+  <div class="wrapper">
+    <!-- 左侧导航栏 -->
+    <nav class="sidebar">
+      <ul class="nav-list">
+        <!-- 索引链接 -->
+        <li><a href="{{ site.baseurl }}/index.html">索引</a></li>
+        <!-- 工具分组 -->
+        <li>
+          <span>工具</span>
+          <ul class="sub-nav">
+            <li><a href="{{ site.baseurl }}/tools/img&zip.html">图片+ZIP 生成器</a></li>
+            <!-- 如果有其它工具页面，继续添加 -->
+          </ul>
+        </li>
+        <!-- 博客分组 -->
+        <li>
+          <span>博客</span>
+          <ul class="sub-nav">
+            <li><a href="{{ site.baseurl }}/blogs/introduction.html">测试页</a></li>
+            <!-- 如果有其它博客页面，继续添加 -->
+          </ul>
+        </li>
+      </ul>
+    </nav>
+
+    <!-- 主内容区域 -->
+    <div class="main-wrapper">
+      <header class="header">
+        <h1>{{ page.header_title | default: "欢迎来到冰兔的工具站" }}</h1>
+        <p>{{ page.header_description | default: "这里集合了各种实用的小工具，每个工具都有独立页面。" }}</p>
+      </header>
+
+      <div class="content">
+        <!-- 新增的多栏正文容器，用于正文内容的两栏排版 -->
+        <div class="main-text">
+          {{ content }}
+        </div>
+      </div>
+
+      <footer>
+        <p>&copy; 2025 FrozenRabbit. All rights reserved.</p>
+      </footer>
+    </div>
+  </div>
+  
+  <!-- 引入公共 JavaScript，如果有的话 -->
+  <script src="{{ site.baseurl }}/js/common.js"></script>
+</body>
+</html>

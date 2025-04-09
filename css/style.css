@@ -7,9 +7,27 @@
 
 body {
   font-family: Arial, Helvetica, sans-serif;
-  line-height: 1.6;
+  line-height: 2;
   background-color: #f0f0f0;
   color: #333;
+}
+
+
+/* 全局段落样式（用于 header、footer 等，正文中的 p 用 .main-text 内的设置） */
+p {
+  margin-top: 1em;
+}
+
+/* 为 header 与 footer 内的 p 设置居中 */
+header p,
+footer p {
+  text-align: center;
+}
+
+/* 主内容区域整体容器 */
+.main-wrapper {
+  margin-left: 260px;        /* 左侧导航宽度+留白 */
+  width: calc(100% - 260px);   /* 占满除去左侧导航外的剩余宽度 */
 }
 
 /* 外层容器 */
@@ -33,6 +51,8 @@ body {
 /* 顶级导航样式 */
 .nav-list {
   list-style: none;
+  padding: 0;
+  margin: 0;
 }
 
 .nav-list > li {
@@ -82,10 +102,21 @@ a.active {
 
 /* 主内容区域 */
 .content {
-  margin-left: 260px;  /* 左侧导航宽度+留白 */
   padding: 20px;
   flex: 1;
   background-color: #fff;
+}
+
+/* 正文多栏容器（仅针对正文内容） */
+.main-text {
+  column-count: 1;
+}
+
+/* 正文多栏容器中的段落样式 */
+.main-text p {
+  margin-top: 1em;
+  /* 清除全局 p 可能设置的宽度限制 */
+  max-width: none;
 }
 
 /* 页眉 */
@@ -96,6 +127,7 @@ header {
   text-align: center;
 }
 
+/* Header 额外样式 */
 .header {
   position: relative;
   padding: 20px;
