@@ -1,11 +1,10 @@
-/* 重置默认样式，确保所有元素具有统一的初始状态 */
+/* 全局重置 */
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
-/* 整个网页的基础样式 */
 body {
   font-family: Arial, Helvetica, sans-serif;
   line-height: 1.6;
@@ -13,7 +12,83 @@ body {
   color: #333;
 }
 
-/* 页头样式 */
+/* 外层容器 */
+.wrapper {
+  display: flex;
+}
+
+/* 左侧导航栏 */
+.sidebar {
+  width: 240px;
+  background-color: #333;
+  color: #fff;
+  min-height: 100vh;
+  padding: 20px;
+  position: fixed;
+  top: 0;
+  left: 0;
+  overflow-y: auto;
+}
+
+/* 顶级导航样式 */
+.nav-list {
+  list-style: none;
+}
+
+.nav-list > li {
+  margin-bottom: 15px;
+}
+
+/* 顶级导航链接和标签 */
+.nav-list > li > a,
+.nav-list > li > span {
+  color: #fff;
+  text-decoration: none;
+  font-size: 1.1em;
+  display: block;
+  padding: 5px 0;
+}
+
+/* 鼠标悬停效果 */
+.nav-list > li > a:hover,
+.nav-list > li > span:hover {
+  color: #4CAF50;
+}
+
+/* 子菜单样式 */
+.sub-nav {
+  list-style: none;
+  padding-left: 15px;
+  margin-top: 5px;
+}
+
+.sub-nav li a {
+  color: #ccc;
+  text-decoration: none;
+  display: block;
+  padding: 3px 0;
+  font-size: 0.95em;
+}
+
+.sub-nav li a:hover {
+  color: #4CAF50;
+}
+
+/* 激活状态 */
+a.active {
+  color: #4CAF50;
+  font-weight: bold;
+}
+
+/* 主内容区域 */
+.content {
+  margin-left: 260px;  /* 左侧导航宽度+留白 */
+  padding: 20px;
+  flex: 1;
+  background-color: #fff;
+}
+
+/* 页眉 */
 header {
   background-color: #4CAF50;
   color: #fff;
@@ -21,44 +96,29 @@ header {
   text-align: center;
 }
 
-/* 导航栏样式 */
-nav {
-  margin: 20px 0;
-  background-color: #333;
-}
-
-nav ul {
-  display: flex;
-  list-style: none;
-  justify-content: center;
-}
-
-nav ul li {
-  margin: 0 10px;
-}
-
-nav ul li a {
-  display: block;
-  padding: 10px 20px;
-  color: #fff;
-  text-decoration: none;
-  transition: background-color 0.3s ease;
-}
-
-nav ul li a:hover {
-  background-color: #575757;
-}
-
-/* 主体内容区域 */
-main {
-  max-width: 800px;
-  margin: 20px auto;
+.header {
+  position: relative;
   padding: 20px;
-  background-color: #fff;
-  box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+  background-color: #4CAF50;
+  color: #fff;
+  text-align: center;
 }
 
-/* 页脚样式 */
+/* 大标题 */
+.header h1 {
+  margin-bottom: 10px;
+}
+
+/* Logo 样式 */
+.header .logo {
+  position: absolute;
+  right: 20px;       /* 距离右侧20px */
+  top: 20px;         /* 距离顶部20px */
+  width: 50px;       /* 根据实际情况调整大小 */
+  height: auto;
+}
+
+/* 页脚 */
 footer {
   background-color: #333;
   color: #fff;
@@ -67,13 +127,17 @@ footer {
   margin-top: 20px;
 }
 
-/* 响应式处理，屏幕宽度小于600px时调整导航栏布局 */
-@media (max-width: 600px) {
-  nav ul {
+/* 响应式调整：屏幕宽度较小时，导航栏显示在顶部 */
+@media (max-width: 768px) {
+  .wrapper {
     flex-direction: column;
   }
-
-  nav ul li {
-    margin: 5px 0;
+  .sidebar {
+    width: 100%;
+    position: relative;
+    min-height: auto;
+  }
+  .content {
+    margin-left: 0;
   }
 }

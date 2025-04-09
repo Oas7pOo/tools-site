@@ -1,43 +1,87 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <title>伪装图生成器</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>图片+ZIP 伪装生成器 - 冰兔的工具站</title>
+  <!-- 引入站点标志 -->
+  <link rel="icon" href="../ico.svg" type="image/svg+xml">
+  <!-- 引入全局样式 -->
+  <link rel="stylesheet" href="../css/style.css">
 </head>
 <body>
-  <h2>伪装文件生成（PNG + ZIP）</h2>
-  <input type="file" id="pngInput" accept=".png"><br>
-  <input type="file" id="zipInput" accept=".zip"><br><br>
-  <button onclick="generateFakeImage()">生成伪装图并下载</button>
+  <div class="wrapper">
+    <!-- 左侧导航栏 -->
+    <nav class="sidebar">
+      <ul class="nav-list">
+        <!-- 因为工具页面在 tools 目录下，返回首页链接为 ../index.html -->
+        <li><a href="../index.html">索引</a></li>
+        <li>
+          <span>工具</span>
+          <ul class="sub-nav">
+            <!-- 当前页面链接可以标记激活状态 -->
+            <li><a href="img&zip.html" class="active">图片+ZIP 伪装生成器</a></li>
+          </ul>
+        </li>
+      </ul>
+    </nav>
+    </div>
+  </body>
+</head>
+  <!-- 主内容区域 -->
+    <div class="content">
+      <header>
+        <h1>PNG 图片+ZIP 伪装生成器</h1>
+        <p>上传图片和 ZIP 文件，生成一个既能正常显示为图片，又包含隐藏 ZIP 内容的伪装文件。</p>
+        <p>图片点击可以打开图片浏览，而更改后缀或通过压缩软件打开可以解压隐藏在图片内的压缩文件</p>
+        <p>具体内容可以参考 <a href="https://www.bilibili.com/video/BV1Pz411v7o3" target="_blank">b站up主小宇Boi的视频</a>。</p>
+      </header>
 
-  <script>
-    async function generateFakeImage() {
-      const pngFile = document.getElementById('pngInput').files[0];
-      const zipFile = document.getElementById('zipInput').files[0];
+      <main>
+        <body>
+          <h2>伪装文件生成（PNG + ZIP）</h2>
+          <input type="file" id="放入一个图片（支持png, jpg, jpeg, gif）" accept=".png, .jpg, .jpeg, .gif"><br>
+          <input type="file" id="zipInput" accept=".zip"><br><br>
+          <button onclick="generateFakeImage()">生成伪装图并下载</button>
 
-      if (!pngFile || !zipFile) {
-        alert("请上传PNG和ZIP文件");
-        return;
-      }
+          <script>
+            async function generateFakeImage() {
+              const pngFile = document.getElementById('pngInput').files[0];
+              const zipFile = document.getElementById('zipInput').files[0];
 
-      const pngBuffer = await pngFile.arrayBuffer();
-      const zipBuffer = await zipFile.arrayBuffer();
+              if (!pngFile || !zipFile) {
+                alert("请上传PNG和ZIP文件");
+                return;
+              }
 
-      // 合并两个 ArrayBuffer
-      const totalLength = pngBuffer.byteLength + zipBuffer.byteLength;
-      const mergedBuffer = new Uint8Array(totalLength);
-      mergedBuffer.set(new Uint8Array(pngBuffer), 0);
-      mergedBuffer.set(new Uint8Array(zipBuffer), pngBuffer.byteLength);
+              const pngBuffer = await pngFile.arrayBuffer();
+              const zipBuffer = await zipFile.arrayBuffer();
 
-      // 创建 Blob 并下载
-      const blob = new Blob([mergedBuffer], { type: 'image/png' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = '伪装图.png';
-      a.click();
-      URL.revokeObjectURL(url);
-    }
-  </script>
+              // 合并两个 ArrayBuffer
+              const totalLength = pngBuffer.byteLength + zipBuffer.byteLength;
+              const mergedBuffer = new Uint8Array(totalLength);
+              mergedBuffer.set(new Uint8Array(pngBuffer), 0);
+              mergedBuffer.set(new Uint8Array(zipBuffer), pngBuffer.byteLength);
+
+              // 创建 Blob 并下载
+              const blob = new Blob([mergedBuffer], { type: 'image/png' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = '伪装图.png';
+              a.click();
+              URL.revokeObjectURL(url);
+            }
+          </script>
+        </body>
+      </main>
+
+      <footer>
+        <p>&copy; 2025 FrozenRabbit. All rights reserved.</p>
+      </footer>
+    </div>
+  </div>
+
+  <script src="../js/common.js"></script>
 </body>
 </html>
