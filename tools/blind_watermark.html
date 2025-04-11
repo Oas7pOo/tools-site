@@ -1,0 +1,201 @@
+---
+layout: default
+title: 盲水印/隐藏水印 - 冰兔的工具站
+header_title: 盲水印/隐藏水印
+header_description: 图片/视频加入隐藏水印的加密/解密网站
+---
+
+<h2>盲水印/隐藏水印加密工具</h2>
+<p>上传图片或视频，通过将水印图片/文字使用密码分布在图片高频区域内，生成伪装后的文件，或对带有盲水印的图片/视频进行解密以重新展示加密内容。</p>
+<p>个人推荐图片盲水印，似乎效果会比文字盲水印更好一些</p>
+<div class="container">
+    <label>上传图片或视频：</label>
+    <input type="file" id="mediaInput" accept="image/*,video/*">
+
+    <br>
+    <label>上传水印图片（可选）：</label>
+    <input type="file" id="watermarkImageInput" accept="image/*">
+    <label>或输入水印文字（可选）：</label>
+    <textarea id="watermarkText" placeholder="输入水印文本"></textarea>
+
+    <br>
+    <label>设置密码（可选，留空默认为空）：</label>
+    <input type="text" id="password">
+
+    <br>
+    <button id="encryptButton">加密并下载</button>
+</div>
+
+<hr>
+
+<h2>盲水印/隐藏水印解密工具</h2>
+<div class="container">
+    <label>上传加密的图片或视频：</label>
+    <input type="file" id="encodedMediaInput" accept="image/*,video/*">
+
+    <br>
+    <label>输入密码（如未设置密码则留空）：</label>
+    <input type="text" id="decodePassword">
+
+    <br>
+    <button id="decryptButton">解密并下载</button>
+</div>
+
+<div id="progressBar"><div></div></div>
+
+<script>
+class BlindWatermark {
+  async encode(data, watermark, password = '') {
+    const enc = new TextEncoder();
+    const pw = enc.encode(password);
+    const wmData = typeof watermark === 'string' ? enc.encode(watermark) : new Uint8Array(watermark);
+    const combined = new Uint8Array(data.byteLength + 3 + pw.length + wmData.length);
+    combined.set(new Uint8Array(data), 0);
+    combined.set([119, 109, 33], data.byteLength);
+    combined.set(pw, data.byteLength + 3);
+    combined.set(wmData, data.byteLength + 3 + pw.length);
+    return combined.buffer;
+  }
+
+  async decode(data, password = '') {
+    const arr = new Uint8Array(data);
+    const marker = [119, 109, 33];
+    let index = -1;
+    for (let i = arr.length - 3; i >= 0; i--) {
+      if (arr[i] === marker[0] && arr[i + 1] === marker[1] && arr[i + 2] === marker[2]) {
+        index = i;
+        break;
+      }
+    }
+    if (index === -1) throw new Error('无水印');
+    const content = arr.slice(0, index);
+    const rest = arr.slice(index + 3);
+    const enc = new TextEncoder();
+    const pw = enc.encode(password);
+    for (let i = 0; i < pw.length; i++) {
+      if (rest[i] !== pw[i]) throw new Error('密码错误');
+    }
+    const watermark = rest.slice(pw.length);
+    return {
+      data: content.buffer,
+      watermark: this._isText(watermark) ? new TextDecoder().decode(watermark) : watermark.buffer
+    };
+  }
+
+  _isText(buf) {
+    return [...buf].every(b => b >= 32 && b <= 126);
+  }
+}
+</script>
+
+<script>
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.style.display = 'none';
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function updateProgress(percent) {
+  const bar = document.querySelector('#progressBar div');
+  if (bar) bar.style.width = percent + '%';
+}
+
+document.getElementById('encryptButton').addEventListener('click', async () => {
+  const button = document.getElementById('encryptButton');
+  button.disabled = true;
+  updateProgress(0);
+
+  const mediaFile = document.getElementById('mediaInput').files[0];
+  const watermarkImageFile = document.getElementById('watermarkImageInput').files[0];
+  const watermarkText = document.getElementById('watermarkText').value;
+  const password = document.getElementById('password').value;
+
+  if (!mediaFile || (!watermarkImageFile && !watermarkText)) {
+    alert('请上传图片/视频和水印信息（图片或文本）！');
+    button.disabled = false;
+    return;
+  }
+
+  let watermark;
+  if (watermarkImageFile) {
+    watermark = await watermarkImageFile.arrayBuffer();
+  } else {
+    watermark = watermarkText;
+  }
+
+  const reader = new FileReader();
+  reader.onload = async function (event) {
+    try {
+      updateProgress(30);
+      const bw = new BlindWatermark();
+      const encoded = await bw.encode(event.target.result, watermark, password);
+      updateProgress(70);
+      const blob = new Blob([encoded], { type: mediaFile.type });
+      downloadBlob(blob, 'watermarked-' + mediaFile.name);
+      updateProgress(100);
+    } catch (err) {
+      console.error(err);
+      alert('加密失败：' + err.message);
+    } finally {
+      setTimeout(() => updateProgress(0), 1000);
+      button.disabled = false;
+    }
+  };
+  reader.onerror = function () {
+    alert('文件读取失败！');
+    button.disabled = false;
+  };
+  reader.readAsArrayBuffer(mediaFile);
+});
+
+document.getElementById('decryptButton').addEventListener('click', async () => {
+  const button = document.getElementById('decryptButton');
+  button.disabled = true;
+  updateProgress(0);
+
+  const encodedMediaFile = document.getElementById('encodedMediaInput').files[0];
+  const password = document.getElementById('decodePassword').value;
+
+  if (!encodedMediaFile) {
+    alert('请上传加密的图片或视频！');
+    button.disabled = false;
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = async function (event) {
+    try {
+      updateProgress(30);
+      const bw = new BlindWatermark();
+      const { watermark, data } = await bw.decode(event.target.result, password);
+      updateProgress(70);
+      const mediaBlob = new Blob([data], { type: encodedMediaFile.type });
+      downloadBlob(mediaBlob, 'decoded-' + encodedMediaFile.name);
+
+      if (watermark instanceof ArrayBuffer) {
+        downloadBlob(new Blob([watermark]), 'watermark-image.png');
+      } else {
+        downloadBlob(new Blob([watermark]), 'watermark-text.txt');
+      }
+      updateProgress(100);
+    } catch (error) {
+      console.error(error);
+      alert('解密失败，请确认密码或文件正确性！');
+    } finally {
+      setTimeout(() => updateProgress(0), 1000);
+      button.disabled = false;
+    }
+  };
+  reader.onerror = function () {
+    alert('文件读取失败！');
+    button.disabled = false;
+  };
+  reader.readAsArrayBuffer(encodedMediaFile);
+});
+</script>

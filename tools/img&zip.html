@@ -9,10 +9,18 @@ header_description: 上传图片和 ZIP 文件，生成伪装后的文件。
 <p>图片点击可以打开图片浏览，而更改后缀或通过压缩软件打开可以解压隐藏在图片内的压缩文件。</p>
 <p>具体内容可以参考 <a href="https://www.bilibili.com/video/BV1Pz411v7o3" target="_blank">b站up主小宇Boi的视频</a>。</p>
 
-<!-- 文件上传及处理区域 -->
-<input type="file" id="pngInput" accept=".png, .jpg, .jpeg, .gif"><br>
-<input type="file" id="zipInput" accept=".zip"><br><br>
-<button onclick="generateFakeImage()">生成伪装图并下载</button>
+<div class="container">
+    <!-- 文件上传及处理区域 -->
+    <label>上传图片：</label>
+    <input type="file" id="pngInput" accept=".png, .jpg, .jpeg, .gif">
+
+    <br>
+    <label>上传压缩包：</label>
+    <input type="file" id="zipInput" accept=".zip">
+
+    <br>
+    <button onclick="generateFakeImage()">生成伪装图并下载</button>
+</div>
 
 <script>
   async function generateFakeImage() {

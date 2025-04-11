@@ -1,0 +1,145 @@
+---
+layout: default
+title: 幻影坦克 - 冰兔的工具站
+header_title: 幻影坦克
+header_description: 上传上层图片和下层图片，生成伪装后的文件。
+---
+
+<h2>幻影坦克图像合成工具</h2>
+
+<div class="container">
+    <label>上传上层图片（正常展示层）：</label>
+    <input type="file" id="topImageInput" accept="image/*">
+
+    <br>
+    <label>上传下层图片（二维码层）：</label>
+    <input type="file" id="hiddenImageInput" accept="image/*">
+
+    <br>
+    <button id="combineButton">生成并下载</button>
+    <canvas id="canvas" style="display:none;"></canvas>
+</div>
+
+<script>
+document.getElementById('combineButton').addEventListener('click', async () => {
+  const topImageFile = document.getElementById('topImageInput').files[0];
+  const hiddenImageFile = document.getElementById('hiddenImageInput').files[0];
+
+  if (!topImageFile || !hiddenImageFile) {
+    alert('请上传上层和下层图片');
+    return;
+  }
+
+  try {
+    // 加载图像
+    const [topImg, hiddenImg] = await Promise.all([
+      loadImage(topImageFile),
+      loadImage(hiddenImageFile)
+    ]);
+
+    // 计算缩放比例（上层主导）
+    const scale = Math.max(
+      hiddenImg.naturalWidth / topImg.naturalWidth,
+      hiddenImg.naturalHeight / topImg.naturalHeight
+    );
+    const outputWidth = Math.round(topImg.naturalWidth * scale);
+    const outputHeight = Math.round(topImg.naturalHeight * scale);
+
+    // 创建主画布
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = outputWidth;
+    canvas.height = outputHeight;
+
+    // 处理上层图像（拉伸填满）
+    ctx.drawImage(topImg, 0, 0, outputWidth, outputHeight);
+    const topData = ctx.getImageData(0, 0, outputWidth, outputHeight).data;
+
+    // 处理下层二维码（等比缩放+白边）
+    const hiddenCanvas = document.createElement('canvas');
+    hiddenCanvas.width = outputWidth;
+    hiddenCanvas.height = outputHeight;
+    const hiddenCtx = hiddenCanvas.getContext('2d');
+
+    // 填充白色背景
+    hiddenCtx.fillStyle = '#FFFFFF';
+    hiddenCtx.fillRect(0, 0, outputWidth, outputHeight);
+
+    // 计算二维码缩放比例（保持宽高比）
+    const qrScale = Math.min(
+      outputWidth / hiddenImg.naturalWidth,
+      outputHeight / hiddenImg.naturalHeight
+    );
+    const qrWidth = hiddenImg.naturalWidth * qrScale;
+    const qrHeight = hiddenImg.naturalHeight * qrScale;
+    const qrX = (outputWidth - qrWidth) / 2;
+    const qrY = (outputHeight - qrHeight) / 2;
+
+    hiddenCtx.drawImage(hiddenImg, qrX, qrY, qrWidth, qrHeight);
+    const hiddenData = hiddenCtx.getImageData(0, 0, outputWidth, outputHeight).data;
+
+    // 合成处理
+    const output = ctx.createImageData(outputWidth, outputHeight);
+    const alpha = 150; // 固定透明度
+
+    for (let i = 0; i < output.data.length; i += 4) {
+      // 判断二维码像素（使用亮度阈值）
+      const qrR = hiddenData[i];
+      const qrG = hiddenData[i+1];
+      const qrB = hiddenData[i+2];
+      const qrLum = 0.3*qrR + 0.59*qrG + 0.11*qrB;
+
+      if (qrLum > 200) { // 白区处理
+        output.data[i] = topData[i];
+        output.data[i+1] = topData[i+1];
+        output.data[i+2] = topData[i+2];
+        output.data[i+3] = 255;
+      } else { // 黑区处理
+        const baseR = topData[i];
+        const baseG = topData[i+1];
+        const baseB = topData[i+2];
+
+        output.data[i] = Math.max(0, Math.min(255,
+          Math.round((baseR - (255 - alpha)) / alpha * 255)
+        ));
+        output.data[i+1] = Math.max(0, Math.min(255,
+          Math.round((baseG - (255 - alpha)) / alpha * 255)
+        ));
+        output.data[i+2] = Math.max(0, Math.min(255,
+          Math.round((baseB - (255 - alpha)) / alpha * 255)
+        ));
+        output.data[i+3] = alpha;
+      }
+    }
+
+    ctx.putImageData(output, 0, 0);
+
+    // 自动下载
+    canvas.toBlob(blob => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `隐藏二维码-${Date.now()}.png`;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 100);
+    }, 'image/png');
+
+  } catch (error) {
+    alert('生成失败: ' + error.message);
+  }
+
+  // 图像加载函数
+  function loadImage(file) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = URL.createObjectURL(file);
+    });
+  }
+});
+</script>

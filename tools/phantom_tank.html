@@ -1,0 +1,209 @@
+---
+layout: default
+title: 幻影坦克 - 冰兔的工具站
+header_title: 幻影坦克
+header_description: 上传上层图片和下层图片，生成伪装后的文件。
+---
+
+<h2>幻影坦克图像合成工具</h2>
+
+<div class="container">
+    <label>上传上层图片（正常展示层）：</label>
+    <input type="file" id="topImageInput" accept="image/*">
+
+    <br>
+    <label>上传下层图片（隐藏层）：</label>
+    <input type="file" id="hiddenImageInput" accept="image/*">
+
+    <br>
+    <button id="combineButton">生成并下载</button>
+    <canvas id="canvas" style="display:none;"></canvas>
+</div>
+
+<script>
+document.getElementById('combineButton').addEventListener('click', async () => {
+  const topImageFile = document.getElementById('topImageInput').files[0];
+  const hiddenImageFile = document.getElementById('hiddenImageInput').files[0];
+
+  if (!topImageFile || !hiddenImageFile) {
+    alert('请上传上层和下层图片');
+    return;
+  }
+
+  try {
+    // 加载原始图像
+    const [topImg, hiddenImg] = await Promise.all([
+      loadImage(topImageFile),
+      loadImage(hiddenImageFile)
+    ]);
+
+    // 预处理图像
+    const processedTop = processSurfaceImage(topImg);
+    const processedHidden = processHiddenImage(hiddenImg);
+
+    // 计算上层缩放比例
+    const scale = Math.max(
+      hiddenImg.naturalWidth / topImg.naturalWidth,
+      hiddenImg.naturalHeight / topImg.naturalHeight
+    );
+    const outputWidth = Math.round(topImg.naturalWidth * scale);
+    const outputHeight = Math.round(topImg.naturalHeight * scale);
+
+    // 创建输出画布
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = outputWidth;
+    canvas.height = outputHeight;
+
+    // 处理上层图像（等比放大）
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(processedTop, 0, 0, outputWidth, outputHeight);
+    const topData = ctx.getImageData(0, 0, outputWidth, outputHeight).data;
+
+    // 处理下层图像（智能缩放）
+    const hiddenCanvas = processHiddenLayer(hiddenImg, outputWidth, outputHeight);
+    const hiddenData = hiddenCanvas.ctx.getImageData(0, 0, outputWidth, outputHeight).data;
+
+    // 核心合成算法
+    const output = ctx.createImageData(outputWidth, outputHeight);
+
+    for (let i = 0; i < output.data.length; i += 4) {
+      const x = 0.3*topData[i] + 0.59*topData[i+1] + 0.11*topData[i+2];
+      const y = 0.3*hiddenData[i] + 0.59*hiddenData[i+1] + 0.11*hiddenData[i+2];
+
+      // 幻影坦克公式
+      const denominator = 255 - x + y;
+      let f = denominator !== 0 ? (255 * y) / denominator : 255;
+      f = clamp(f, 0, 255);
+
+      let alpha = 255;
+      if (f !== 255) {
+        alpha = 225 * (x - 255) / (f - 255);
+      } else {
+        alpha = (y / f) * 255;
+      }
+      alpha = clamp(alpha, 0, 255);
+
+      output.data[i] = output.data[i+1] = output.data[i+2] = Math.round(f);
+      output.data[i+3] = Math.round(alpha);
+    }
+
+    ctx.putImageData(output, 0, 0);
+    triggerDownload(canvas);
+
+  } catch (error) {
+    alert('生成失败: ' + error.message);
+  }
+
+  // 下层图像处理函数（关键修改）
+  function processHiddenLayer(img, maxWidth, maxHeight) {
+    const canvas = document.createElement('canvas');
+    canvas.width = maxWidth;
+    canvas.height = maxHeight;
+    const ctx = canvas.getContext('2d');
+
+    // 填充黑色背景
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, maxWidth, maxHeight);
+
+    // 计算缩放比例（保持原比例）
+    const scale = Math.min(
+      maxWidth / img.naturalWidth,
+      maxHeight / img.naturalHeight
+    );
+    const scaledWidth = img.naturalWidth * scale;
+    const scaledHeight = img.naturalHeight * scale;
+
+    // 居中绘制
+    const dx = (maxWidth - scaledWidth) / 2;
+    const dy = (maxHeight - scaledHeight) / 2;
+    ctx.drawImage(img, dx, dy, scaledWidth, scaledHeight);
+
+    return { canvas, ctx };
+  }
+
+  // 上层预处理（亮度提升）
+  function processSurfaceImage(img) {
+    const canvas = createCanvasFromImage(img);
+    const ctx = canvas.getContext('2d');
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+
+    for (let i = 0; i < data.length; i += 4) {
+      let gray = 0.3*data[i] + 0.59*data[i+1] + 0.11*data[i+2];
+      gray = (gray >> 1) + 128;
+
+      // 纯黑修正
+      if (data[i] === 0 && data[i+1] === 0 && data[i+2] === 0) {
+        gray = 129;
+      }
+
+      data[i] = data[i+1] = data[i+2] = clamp(gray, 128, 255);
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+    return canvas;
+  }
+
+  // 下层预处理（亮度降低）
+  function processHiddenImage(img) {
+    const canvas = createCanvasFromImage(img);
+    const ctx = canvas.getContext('2d');
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+
+    for (let i = 0; i < data.length; i += 4) {
+      let gray = 0.3*data[i] + 0.59*data[i+1] + 0.11*data[i+2];
+      gray = gray >> 1;
+
+      // 纯白修正
+      if (data[i] === 255 && data[i+1] === 255 && data[i+2] === 255) {
+        gray = 127;
+      }
+
+      data[i] = data[i+1] = data[i+2] = clamp(gray, 0, 127);
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+    return canvas;
+  }
+
+  // 工具函数
+  function clamp(value, min, max) {
+    return Math.min(max, Math.max(min, value));
+  }
+
+  function createCanvasFromImage(img) {
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    return canvas;
+  }
+
+  function loadImage(file) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = URL.createObjectURL(file);
+    });
+  }
+
+  function triggerDownload(canvas) {
+    canvas.toBlob(blob => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `phantom-tank-${Date.now()}.png`;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 100);
+    }, 'image/png');
+  }
+});
+</script>

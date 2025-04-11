@@ -43,7 +43,7 @@ footer p {
   min-height: 100vh;
 }
 
-/* 左侧导航栏 */
+/* 默认桌面端：sidebar固定在左 */
 .sidebar {
   width: 240px;
   background-color: #333;
@@ -54,6 +54,8 @@ footer p {
   top: 0;
   left: 0;
   overflow-y: auto;
+  transition: transform 0.3s ease; /* 动画过渡 */
+  transform: translateX(0);       /* 桌面端保持不动 */
 }
 
 /* 顶级导航样式 */
@@ -111,8 +113,51 @@ a.active {
 /* 主内容区域 */
 .content {
   margin-right: 260px;
+  margin：20 px auto;
   padding: 20px;
   flex: 1;
+  background-color: rgba(255, 255, 255, 0.5);
+}
+
+.container {
+  max-width: 600px;
+  margin: 20px auto;
+  padding: 20px;
+  border-radius: 8px;
+}
+
+
+label {
+  display: block;
+  margin: 10px 0 5px;
+  font-weight: bold;
+}
+
+input[type="file"] {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+button {
+  display: block;
+  width: 100%;
+  padding: 12px;
+  margin-top: 15px;
+  background: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+or_button {
+}
+
+button:hover {
+  background: #0056b3;
 }
 
 /* 正文多栏容器（仅针对正文内容） */
@@ -167,21 +212,58 @@ footer {
   margin-top: auto;
 }
 
+#progressBar {
+  width: 100%;
+  height: 10px;
+  background-color: #eee;
+  margin-top: 20px;
+}
+
+#progressBar div {
+  height: 100%;
+  width: 0%;
+  background-color: #4CAF50;
+  transition: width 0.4s ease;
+}
+
 /* 响应式调整：屏幕宽度较小时，导航栏显示在顶部 */
 @media (max-width: 768px) {
   .wrapper {
     flex-direction: column;
   }
   .sidebar {
-    width: 100%;
-    position: relative;
-    min-height: auto;
+    position: fixed;
+    width: 240px;
+    height: 100%;
+    top: 0;
+    left: 0;
+    transform: translateX(-100%); /* 默认向左移出屏幕 */
+    z-index: 9998;
   }
+  .sidebar.open {
+    transform: translateX(0);     /* 当有 .open 类时滑出屏幕 */
+  }
+   /* 可选：隐藏桌面端 margin-left 给 footer 正文等 */
   .content {
     margin-left: 0;
+    margin-right: 0;
   }
   .main-wrapper {
     margin-left: 0;
     width: 100%;
+  }
+  /* 汉堡按钮样式 */
+  .hamburger-btn {
+    position: fixed;
+    top: 15px;
+    left: 15px;
+    z-index: 9999;
+    font-size: 24px;
+    background: #333;
+    color: #fff;
+    border: none;
+    cursor: pointer;
+    padding: 8px 12px;
+    border-radius: 4px;
   }
 }

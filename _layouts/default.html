@@ -23,11 +23,14 @@
 <body>
   <!-- 全屏背景 canvas -->
   <canvas id="bgCanvas"></canvas>
-
+   <!-- 这里放置一个按钮，用于在小屏上点击显示/隐藏 sidebar -->
+  <button id="toggleBtn" class="hamburger-btn" type = "or_button">&#9776;</button>
   <div class="wrapper">
     <!-- 左侧导航栏 -->
-    <nav class="sidebar">
+    <nav class="sidebar" id="sidebar">
       <ul class="nav-list">
+        <!-- 空出菜单按钮 -->
+        <br><br>
         <!-- 索引链接 -->
         <li><a href="{{ site.baseurl }}/index.html">索引</a></li>
         <!-- 工具分组 -->
@@ -35,6 +38,9 @@
           <span>工具</span>
           <ul class="sub-nav">
             <li><a href="{{ site.baseurl }}/tools/img&zip.html">图片+ZIP 生成器</a></li>
+            <li><a href="{{ site.baseurl }}/tools/blind_watermark.html">图片隐藏水印加密</a></li>
+            <li><a href="{{ site.baseurl }}/tools/phantom_tank.html">幻影坦克</a></li>
+            <li><a href="{{ site.baseurl }}/tools/hideQCcode.html">图片隐藏二维码</a></li>
           </ul>
         </li>
         <!-- 博客分组 -->
@@ -66,6 +72,15 @@
 
   <!-- 引入公共 JavaScript，如果有的话 -->
   <script src="{{ site.baseurl }}/js/common.js"></script>
+
+  <!-- 简单JS控制sidebar显示/隐藏 -->
+  <script>
+    const toggleBtn = document.getElementById('toggleBtn');
+    const sidebar = document.getElementById('sidebar');
+    toggleBtn.addEventListener('click', function() {
+      sidebar.classList.toggle('open');  // 切换sidebar的open类
+    });
+  </script>
 
   <!-- 以下脚本用于绘制全屏背景动画，带有混合色彩和鼠标扰动效果 -->
   <script>
