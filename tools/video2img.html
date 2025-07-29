@@ -1,0 +1,545 @@
+---
+layout: default
+title: 音频图像转换器 - 冰兔的工具站
+header_title: 音频图像转换器
+header_description: 基于音频频率生成图像，或将频率图像还原为音频的双向转换工具
+---
+
+<h2>音频转图像工具</h2>
+<p>上传音频文件，系统将自动生成对应的频谱图像。图像宽度会根据音频长度自动调整，高度固定为256像素，每个像素代表音频的频率和振幅信息。</p>
+<div class="container">
+    <label>上传音频文件：</label>
+    <input type="file" id="audioInput" accept="audio/*">
+    <br><br>
+    <button id="audioToImageButton" class="disable-on-click">生成图像并下载</button>
+</div>
+
+<hr>
+
+<h2>图像转音频工具</h2>
+<p>上传由音频生成的频谱图像，系统将自动识别图像宽度来确定音频长度，并还原为WAV格式音频文件。</p>
+<div class="container">
+    <label>上传频率图像：</label>
+    <input type="file" id="imageInput" accept="image/*">
+    <br><br>
+    <button id="imageToAudioButton" class="disable-on-click">还原音频并下载</button>
+</div>
+
+<div id="preview" style="margin-top: 20px;">
+    <h3>预览区域</h3>
+    <div id="imagePreview"></div>
+    <div id="audioPreview"></div>
+</div>
+
+<div id="progressBar"><div></div></div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    class LosslessAudioImageConverter {
+        constructor() {
+            this.audioContext = null;
+            this.init();
+        }
+
+        init() {
+            document.getElementById('audioToImageButton').addEventListener('click', () => this.audioToImage());
+            document.getElementById('imageToAudioButton').addEventListener('click', () => this.imageToAudio());
+        }
+
+        async audioToImage() {
+            const file = document.getElementById('audioInput').files[0];
+            if (!file) {
+                alert('请先选择音频文件');
+                return;
+            }
+
+            const button = document.getElementById('audioToImageButton');
+            const progressBar = document.getElementById('progressBar');
+
+            button.disabled = true;
+            button.textContent = '正在处理...';
+            progressBar.style.display = 'block';
+
+            try {
+                if (!this.audioContext) {
+                    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                }
+
+                // 解码音频
+                const arrayBuffer = await file.arrayBuffer();
+                const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+
+                // 获取音频数据 - 如果是立体声，转为单声道
+                let audioData;
+                if (audioBuffer.numberOfChannels === 1) {
+                    audioData = audioBuffer.getChannelData(0);
+                } else {
+                    // 立体声转单声道：取平均值
+                    const left = audioBuffer.getChannelData(0);
+                    const right = audioBuffer.getChannelData(1);
+                    audioData = new Float32Array(left.length);
+                    for (let i = 0; i < left.length; i++) {
+                        audioData[i] = (left[i] + right[i]) / 2;
+                    }
+                }
+
+                // 直接将音频样本数据编码为图像
+                const canvas = this.audioDataToImage(audioData, audioBuffer.sampleRate);
+
+                // 显示预览
+                const audioPreview = document.getElementById('audioPreview');
+                audioPreview.innerHTML = `
+                    <h4>生成的音频图像：</h4>
+                    ${canvas.outerHTML}
+                    <div style="background: #e3f2fd; padding: 15px; border-radius: 4px; margin: 15px 0;">
+                        <strong>音频信息：</strong><br>
+                        时长: ${audioBuffer.duration.toFixed(3)}秒<br>
+                        采样率: ${audioBuffer.sampleRate}Hz<br>
+                        样本数: ${audioData.length}<br>
+                        图像尺寸: ${canvas.width}×${canvas.height}像素
+                    </div>
+                `;
+
+                // 自动下载图像
+                canvas.toBlob(function(blob) {
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `audio_spectrum_${Date.now()}.png`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                }, 'image/png', 1.0);
+
+            } catch (error) {
+                console.error('音频处理错误:', error);
+                alert('音频文件处理失败，请检查文件格式是否支持');
+            } finally {
+                button.disabled = false;
+                button.textContent = '生成图像并下载';
+                progressBar.style.display = 'none';
+            }
+        }
+
+        // 改进的音频数据编码方法，增加更多验证信息
+        audioDataToImage(audioData, sampleRate) {
+            const length = audioData.length;
+            const samplesPerRow = 1000;
+            const width = samplesPerRow * 2;
+            const height = Math.ceil(length / samplesPerRow) + 2; // +2行：元数据行和校验行
+
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+
+            const imageData = ctx.createImageData(width, height);
+            const data = imageData.data;
+
+            console.log('编码参数:', { length, width, height, sampleRate });
+
+            // 第一行：主要元数据
+            // 魔法数字（4字节）- 用于识别格式
+            const magicNumber = 0x41554456; // 'AUDV' in hex
+            const magicBytes = new Uint8Array(new Uint32Array([magicNumber]).buffer);
+            for (let i = 0; i < 4; i++) {
+                const pixelIndex = i * 4;
+                data[pixelIndex] = magicBytes[i];
+                data[pixelIndex + 1] = magicBytes[i];
+                data[pixelIndex + 2] = magicBytes[i];
+                data[pixelIndex + 3] = 255;
+            }
+
+            // 采样率（4字节）
+            const sampleRateBytes = new Uint8Array(new Uint32Array([sampleRate]).buffer);
+            for (let i = 0; i < 4; i++) {
+                const pixelIndex = (i + 4) * 4;
+                data[pixelIndex] = sampleRateBytes[i];
+                data[pixelIndex + 1] = sampleRateBytes[i];
+                data[pixelIndex + 2] = sampleRateBytes[i];
+                data[pixelIndex + 3] = 255;
+            }
+
+            // 数据长度（4字节）
+            const lengthBytes = new Uint8Array(new Uint32Array([length]).buffer);
+            for (let i = 0; i < 4; i++) {
+                const pixelIndex = (i + 8) * 4;
+                data[pixelIndex] = lengthBytes[i];
+                data[pixelIndex + 1] = lengthBytes[i];
+                data[pixelIndex + 2] = lengthBytes[i];
+                data[pixelIndex + 3] = 255;
+            }
+
+            // 填充剩余第一行
+            for (let i = 12; i < width; i++) {
+                const pixelIndex = i * 4;
+                data[pixelIndex] = 128;
+                data[pixelIndex + 1] = 128;
+                data[pixelIndex + 2] = 128;
+                data[pixelIndex + 3] = 255;
+            }
+
+            // 第二行：校验和和版本信息
+            let checksum = 0;
+            for (let i = 0; i < Math.min(length, 1000); i++) {
+                checksum += Math.abs(audioData[i]);
+            }
+            checksum = Math.floor(checksum * 1000) % 0xFFFFFFFF;
+
+            const checksumBytes = new Uint8Array(new Uint32Array([checksum]).buffer);
+            for (let i = 0; i < 4; i++) {
+                const pixelIndex = (width + i) * 4;
+                data[pixelIndex] = checksumBytes[i];
+                data[pixelIndex + 1] = checksumBytes[i];
+                data[pixelIndex + 2] = checksumBytes[i];
+                data[pixelIndex + 3] = 255;
+            }
+
+            // 版本号（1字节）
+            const version = 2;
+            const pixelIndex = (width + 4) * 4;
+            data[pixelIndex] = version;
+            data[pixelIndex + 1] = version;
+            data[pixelIndex + 2] = version;
+            data[pixelIndex + 3] = 255;
+
+            // 填充第二行剩余部分
+            for (let i = 5; i < width; i++) {
+                const pixelIndex = (width + i) * 4;
+                data[pixelIndex] = 64;
+                data[pixelIndex + 1] = 64;
+                data[pixelIndex + 2] = 64;
+                data[pixelIndex + 3] = 255;
+            }
+
+            // 从第三行开始存储音频数据
+            for (let i = 0; i < length; i++) {
+                const rowIndex = Math.floor(i / samplesPerRow) + 2;
+                const colIndex = (i % samplesPerRow) * 2;
+                const pixelIndex = (rowIndex * width + colIndex) * 4;
+
+                const sample = Math.max(-1, Math.min(1, audioData[i]));
+                const intSample = Math.round(sample * 32767);
+                const unsignedSample = intSample + 32768;
+
+                // 存储低8位
+                data[pixelIndex] = unsignedSample & 0xFF;
+                data[pixelIndex + 1] = unsignedSample & 0xFF;
+                data[pixelIndex + 2] = unsignedSample & 0xFF;
+                data[pixelIndex + 3] = 255;
+
+                // 存储高8位
+                if (pixelIndex + 4 < data.length) {
+                    data[pixelIndex + 4] = (unsignedSample >> 8) & 0xFF;
+                    data[pixelIndex + 5] = (unsignedSample >> 8) & 0xFF;
+                    data[pixelIndex + 6] = (unsignedSample >> 8) & 0xFF;
+                    data[pixelIndex + 7] = 255;
+                }
+            }
+
+            ctx.putImageData(imageData, 0, 0);
+            return canvas;
+        }
+
+        async imageToAudio() {
+            const file = document.getElementById('imageInput').files[0];
+            if (!file) {
+                alert('请先选择图像文件');
+                return;
+            }
+
+            const button = document.getElementById('imageToAudioButton');
+            const progressBar = document.getElementById('progressBar');
+
+            button.disabled = true;
+            button.textContent = '正在处理...';
+            progressBar.style.display = 'block';
+
+            try {
+                const img = await this.loadImage(file);
+                const canvas = document.createElement('canvas');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0);
+
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const result = this.imageToAudioData(imageData);
+
+                if (!result || !result.audioData || result.audioData.length === 0) {
+                    throw new Error('无法从图像中提取有效的音频数据');
+                }
+
+                const { audioData, metadata } = result;
+
+                if (!this.audioContext) {
+                    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                }
+
+                const sampleRate = metadata.sampleRate || 44100;
+                const audioBuffer = this.audioContext.createBuffer(1, audioData.length, sampleRate);
+                audioBuffer.copyToChannel(audioData, 0);
+
+                const wavBlob = this.audioBufferToWav(audioBuffer);
+
+                const imagePreview = document.getElementById('imagePreview');
+                const audioUrl = URL.createObjectURL(wavBlob);
+
+                imagePreview.innerHTML = `
+                    <h4>重建的音频：</h4>
+                    <audio controls src="${audioUrl}"></audio>
+                    <div style="background: #e3f2fd; padding: 15px; border-radius: 4px; margin: 15px 0;">
+                        <strong>音频信息：</strong><br>
+                        时长: ${(audioData.length / sampleRate).toFixed(3)}秒<br>
+                        采样率: ${sampleRate}Hz<br>
+                        样本数: ${audioData.length}<br>
+                        ${metadata.version ? `格式版本: ${metadata.version}` : ''}
+                    </div>
+                `;
+
+                const url = URL.createObjectURL(wavBlob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `restored_audio_${Date.now()}.wav`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+            } catch (error) {
+                console.error('图像转音频错误:', error);
+                // 提供更详细的错误信息和解决方案
+                let errorMessage = '图像处理失败。\n\n可能的原因：\n';
+                if (error.message.includes('魔法数字')) {
+                    errorMessage += '• 这不是由本工具生成的音频图像\n• 请确保上传的是通过"音频转图像"功能生成的PNG文件';
+                } else if (error.message.includes('元数据')) {
+                    errorMessage += '• 图像文件可能已损坏\n• 请重新生成音频图像';
+                } else if (error.message.includes('边界')) {
+                    errorMessage += '• 图像尺寸异常\n• 请检查图像是否完整';
+                } else {
+                    errorMessage += '• 图像格式不支持或文件已损坏\n• 请确保上传PNG格式的音频图像\n• 如果问题持续，请重新生成音频图像';
+                }
+                alert(errorMessage);
+            } finally {
+                button.disabled = false;
+                button.textContent = '还原音频并下载';
+                progressBar.style.display = 'none';
+            }
+        }
+
+        // 改进的图像解码方法，增加多重验证和容错处理
+        imageToAudioData(imageData) {
+            const data = imageData.data;
+            const width = imageData.width;
+            const height = imageData.height;
+
+            console.log('开始解码，图像尺寸:', width, 'x', height);
+
+            try {
+                // 检查图像尺寸
+                if (width < 24 || height < 3) {
+                    throw new Error('图像尺寸过小，不是有效的音频图像');
+                }
+
+                // 验证魔法数字
+                const magicBytes = new Uint8Array(4);
+                for (let i = 0; i < 4; i++) {
+                    const pixelIndex = i * 4;
+                    magicBytes[i] = data[pixelIndex];
+                }
+                const magicNumber = new Uint32Array(magicBytes.buffer)[0];
+
+                // 尝试多种格式
+                let isNewFormat = (magicNumber === 0x41554456); // 'AUDV'
+                let isOldFormat = false;
+
+                // 检查旧格式（标识符为170）
+                if (!isNewFormat) {
+                    let oldFormatCount = 0;
+                    for (let i = 8; i < Math.min(20, width); i++) {
+                        const pixelIndex = i * 4;
+                        if (data[pixelIndex] === 170 && data[pixelIndex + 1] === 170 && data[pixelIndex + 2] === 170) {
+                            oldFormatCount++;
+                        }
+                    }
+                    isOldFormat = oldFormatCount >= 8;
+                }
+
+                if (!isNewFormat && !isOldFormat) {
+                    throw new Error('不是有效的音频图像格式。请确保上传的是通过本工具生成的PNG图像。');
+                }
+
+                let sampleRate, dataLength, version = 1;
+                let dataStartRow = 1;
+
+                if (isNewFormat) {
+                    console.log('检测到新格式（v2）');
+                    dataStartRow = 2;
+
+                    // 解码采样率
+                    const sampleRateBytes = new Uint8Array(4);
+                    for (let i = 0; i < 4; i++) {
+                        const pixelIndex = (i + 4) * 4;
+                        sampleRateBytes[i] = data[pixelIndex];
+                    }
+                    sampleRate = new Uint32Array(sampleRateBytes.buffer)[0];
+
+                    // 解码数据长度
+                    const lengthBytes = new Uint8Array(4);
+                    for (let i = 0; i < 4; i++) {
+                        const pixelIndex = (i + 8) * 4;
+                        lengthBytes[i] = data[pixelIndex];
+                    }
+                    dataLength = new Uint32Array(lengthBytes.buffer)[0];
+
+                    // 获取版本号
+                    const versionPixelIndex = (width + 4) * 4;
+                    if (versionPixelIndex < data.length) {
+                        version = data[versionPixelIndex];
+                    }
+
+                } else {
+                    console.log('检测到旧格式（v1）');
+                    dataStartRow = 1;
+
+                    // 旧格式解码
+                    const sampleRateBytes = new Uint8Array(4);
+                    for (let i = 0; i < 4; i++) {
+                        const pixelIndex = i * 4;
+                        sampleRateBytes[i] = data[pixelIndex];
+                    }
+                    sampleRate = new Uint32Array(sampleRateBytes.buffer)[0];
+
+                    const lengthBytes = new Uint8Array(4);
+                    for (let i = 0; i < 4; i++) {
+                        const pixelIndex = (i + 4) * 4;
+                        lengthBytes[i] = data[pixelIndex];
+                    }
+                    dataLength = new Uint32Array(lengthBytes.buffer)[0];
+                }
+
+                console.log('解码的元数据:', { sampleRate, dataLength, version });
+
+                // 验证元数据合理性，但更宽松
+                if (sampleRate <= 0 || sampleRate > 192000) {
+                    console.warn('采样率异常，使用默认值44100Hz');
+                    sampleRate = 44100;
+                }
+
+                if (dataLength <= 0 || dataLength > 50000000) { // 增加最大限制
+                    throw new Error(`数据长度异常: ${dataLength}`);
+                }
+
+                const audioData = [];
+                const samplesPerRow = 1000;
+                let successfulSamples = 0;
+
+                // 解码音频数据，增加错误恢复
+                for (let i = 0; i < dataLength; i++) {
+                    const rowIndex = Math.floor(i / samplesPerRow) + dataStartRow;
+                    const colIndex = (i % samplesPerRow) * 2;
+                    const pixelIndex = (rowIndex * width + colIndex) * 4;
+
+                    // 检查边界，但继续处理
+                    if (pixelIndex + 7 >= data.length) {
+                        console.warn(`到达图像边界，样本 ${i}/${dataLength}`);
+                        break;
+                    }
+
+                    try {
+                        const lowByte = data[pixelIndex];
+                        const highByte = data[pixelIndex + 4];
+                        const unsignedSample = (highByte << 8) | lowByte;
+                        const intSample = unsignedSample - 32768;
+                        const floatSample = Math.max(-1, Math.min(1, intSample / 32767));
+
+                        audioData.push(floatSample);
+                        successfulSamples++;
+                    } catch (e) {
+                        console.warn(`样本 ${i} 解码失败，使用静音`);
+                        audioData.push(0);
+                    }
+                }
+
+                console.log(`解码完成，成功解码 ${successfulSamples}/${dataLength} 个样本`);
+
+                if (audioData.length === 0) {
+                    throw new Error('没有找到有效的音频数据');
+                }
+
+                // 如果样本数少于预期，进行警告但继续处理
+                if (audioData.length < dataLength * 0.8) {
+                    console.warn(`只成功解码了 ${audioData.length}/${dataLength} 个样本`);
+                }
+
+                return {
+                    audioData: new Float32Array(audioData),
+                    metadata: {
+                        sampleRate: sampleRate,
+                        length: audioData.length,
+                        version: version
+                    }
+                };
+
+            } catch (error) {
+                console.error('解码过程出错:', error);
+                throw error;
+            }
+        }
+
+        loadImage(file) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => {
+                    URL.revokeObjectURL(img.src);
+                    resolve(img);
+                };
+                img.onerror = () => {
+                    URL.revokeObjectURL(img.src);
+                    reject(new Error('图像加载失败，请检查文件格式'));
+                };
+                img.src = URL.createObjectURL(file);
+            });
+        }
+
+        audioBufferToWav(buffer) {
+            const length = buffer.length;
+            const arrayBuffer = new ArrayBuffer(44 + length * 2);
+            const view = new DataView(arrayBuffer);
+            const channelData = buffer.getChannelData(0);
+
+            const writeString = (offset, string) => {
+                for (let i = 0; i < string.length; i++) {
+                    view.setUint8(offset + i, string.charCodeAt(i));
+                }
+            };
+
+            writeString(0, 'RIFF');
+            view.setUint32(4, 36 + length * 2, true);
+            writeString(8, 'WAVE');
+            writeString(12, 'fmt ');
+            view.setUint32(16, 16, true);
+            view.setUint16(20, 1, true);
+            view.setUint16(22, 1, true);
+            view.setUint32(24, buffer.sampleRate, true);
+            view.setUint32(28, buffer.sampleRate * 2, true);
+            view.setUint16(32, 2, true);
+            view.setUint16(34, 16, true);
+            writeString(36, 'data');
+            view.setUint32(40, length * 2, true);
+
+            let offset = 44;
+            for (let i = 0; i < length; i++) {
+                const sample = Math.max(-1, Math.min(1, channelData[i]));
+                view.setInt16(offset, sample * 0x7FFF, true);
+                offset += 2;
+            }
+
+            return new Blob([arrayBuffer], { type: 'audio/wav' });
+        }
+    }
+
+    new LosslessAudioImageConverter();
+});
+</script>

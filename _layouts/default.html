@@ -20,6 +20,9 @@
     }
   </style>
 </head>
+
+
+
 <body>
   <!-- 全屏背景 canvas -->
   <canvas id="bgCanvas"></canvas>
@@ -38,9 +41,14 @@
           <span>工具</span>
           <ul class="sub-nav">
             <li><a href="{{ site.baseurl }}/tools/img&zip.html">图片+ZIP 生成器</a></li>
-            <li><a href="{{ site.baseurl }}/tools/blind_watermark.html">图片隐藏水印加密</a></li>
+            <li><a href="{{ site.baseurl }}/tools/blind_watermark.html">盲水印/图片隐藏水印加密</a></li>
+            <li><a href="{{ site.baseurl }}/tools/blind_claude.html">盲水印claude</a></li>
+            <li><a href="{{ site.baseurl }}/tools/binary_barcode.html">文字转二进制/条形码</a></li>
             <li><a href="{{ site.baseurl }}/tools/phantom_tank.html">幻影坦克</a></li>
             <li><a href="{{ site.baseurl }}/tools/hideQCcode.html">图片隐藏二维码</a></li>
+            <li><a href="{{ site.baseurl }}/tools/text2png.html">文字转图片</a></li>
+            <li><a href="{{ site.baseurl }}/tools/morse_code.html">摩斯密码</a></li>
+            <li><a href="{{ site.baseurl }}/tools/video2img.html">音频转图片</a></li>
           </ul>
         </li>
         <!-- 博客分组 -->
@@ -72,6 +80,31 @@
 
   <!-- 引入公共 JavaScript，如果有的话 -->
   <script src="{{ site.baseurl }}/js/common.js"></script>
+
+  <script>
+    // 防重复点击控制器（适用于所有 .disable-on-click 按钮）
+    document.addEventListener('DOMContentLoaded', function() {
+      document.querySelectorAll('.disable-on-click').forEach(button => {
+        button.addEventListener('click', async function(e) {
+          e.preventDefault();
+          const btn = this;
+          btn.disabled = true;
+
+          //try {
+            // 执行生成逻辑（需确保 generateFakeImage 函数存在）
+            //await generateFakeImage();
+          //} catch (error) {
+            //alert("生成失败：" + error.message);
+          //}
+
+          // 根据 data-timeout 自动恢复
+          setTimeout(() => {
+            btn.disabled = false;
+          }, parseInt(btn.dataset.timeout) || 60000);
+        });
+      });
+    });
+  </script>
 
   <!-- 简单JS控制sidebar显示/隐藏 -->
   <script>

@@ -1,0 +1,396 @@
+---
+layout: default
+title: 文本转摩斯密码 - 冰兔的工具站
+header_title: 文本转摩斯密码
+header_description: 将文本输入文本框生成摩斯密码文件与音频，以及将音频或摩斯密码转回文本文件。
+---
+
+<h2>文本转摩斯密码工具</h2>
+<div class="container">
+    <label for="plaintext">请输入内容（中文将转成拼音，英文数字标点直接处理，空格→/）：</label>
+    <textarea id="plaintext" rows="4" style="width: 100%;"></textarea>
+
+    <button onclick="convertToMorse()" class="disable-on-click" >生成摩斯文本文件</button>
+    <button onclick="downloadMorseAudio()" class="disable-on-click" >生成并下载摩斯音频</button>
+</div>
+
+<hr>
+<h2>摩斯编码解密</h2>
+<div class="container">
+    <p>可直接粘贴摩斯码（空格以<code>/</code>分隔），或选择上传音频：</p>
+
+    <!-- 文本解密 -->
+    <label for="morseText">粘贴摩斯码 (空格=斜杠/，字符间空格分隔):</label>
+    <textarea id="morseText" rows="3" style="width:100%;"></textarea>
+    <button onclick="decodeMorseText()" class="disable-on-click" >解密回拼音/英文/数字</button>
+    <p id="decodedResult" style="margin-top: 1em; font-weight: bold;"></p>
+
+    <!-- 音频解密 (演示) -->
+    <label for="morseAudioFile">或上传摩斯音频文件（.wav）:</label>
+    <input type="file" id="morseAudioFile" accept=".wav,audio/wav,audio/*" />
+    <button onclick="decodeMorseAudio()" class="disable-on-click" >解析音频(演示)</button>
+    <p id="audioDecodeResult" style="margin-top: 1em; font-weight: bold;"></p>
+</div>
+
+<script type="module">
+/***************************************************
+ * 1) 汉字 → 拼音
+ ***************************************************/
+    import PinyinConverter from '../js/pinyin_processor.js';
+    const pinyinConverter = new PinyinConverter();
+
+    function convertChineseToPinyin(str) {
+        return pinyinConverter.convert(str)
+            .toLowerCase() // 统一转小写
+            .replace(/\s+/g, ' '); // 标准化空格
+    }
+
+/***************************************************
+ * 2) 拼音/英文/数字/标点 → 摩斯码
+ *    此处空格 => "/"
+ ***************************************************/
+const morseMap = {
+  'A': '.-',    'B': '-...',  'C': '-.-.',  'D': '-..',
+  'E': '.',     'F': '..-.',  'G': '--.',   'H': '....',
+  'I': '..',    'J': '.---',  'K': '-.-',   'L': '.-..',
+  'M': '--',    'N': '-.',    'O': '---',   'P': '.--.',
+  'Q': '--.-',  'R': '.-.',   'S': '...',   'T': '-',
+  'U': '..-',   'V': '...-',  'W': '.--',   'X': '-..-',
+  'Y': '-.--',  'Z': '--..',
+
+  '0': '-----', '1': '.----', '2': '..---', '3': '...--',
+  '4': '....-', '5': '.....', '6': '-....', '7': '--...',
+  '8': '---..', '9': '----.',
+
+  '.': '.-.-.-',  ',': '--..--',  '?': '..--..',  '!': '-.-.--',
+  ':': '---...',  ';': '-.-.-.',  '"': '.-..-.',  "'": '.----.',
+  '/': '-..-.',   '(': '-.--.',   ')': '-.--.-',  '&': '.-...',
+  '-': '-....-',  '_': '..--.-',  '=': '-...-',   '+': '.-.-.',
+  '@': '.--.-.',  '$': '...-..-'
+};
+
+function stringToMorse(str) {
+  const result = [];
+  for (let ch of str) {
+    if (ch === ' ') {
+      // 空格 => '/'
+      result.push('/');
+      continue;
+    }
+    const upperC = ch.toUpperCase();
+    if (morseMap[upperC]) {
+      result.push(morseMap[upperC]);
+    }
+    else if (/^[A-Z0-9]$/.test(upperC)) {
+      // 若是英数字但没映射上 => '?'
+      result.push('?');
+    }
+    else {
+      // 其它字符(如拼音的 'n','i') => 再做拆分或用 '?'
+      // 此处简化：一个字符 => 一个 '?'
+      result.push('?');
+    }
+  }
+  // 用空格分隔不同字符的摩斯
+  return result.join(' ');
+}
+
+/***************************************************
+ * 3) 将用户输入文本 -> 拼音 -> 摩斯，下载txt
+ ***************************************************/
+function convertToMorse() {
+    const input = document.getElementById('plaintext').value.trim();
+    if (!input) {
+        alert("请输入要转换的文本");
+        return;
+    }
+    const pinyinStr = convertChineseToPinyin(input);
+    const morseStr = stringToMorse(pinyinStr);
+
+  const blob = new Blob([morseStr], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `morse_${Date.now()}.txt`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/***************************************************
+ * 4) 生成摩斯音频(空格 => "/" => 更长静音)
+ ***************************************************/
+async function downloadMorseAudio() {
+  const input = document.getElementById('plaintext').value.trim();
+  if (!input) {
+    alert("请输入要转换的文本");
+    return;
+  }
+  const pinyinStr = convertChineseToPinyin(input);
+  const morseStr = stringToMorse(pinyinStr);
+
+  // 拆分成字符(用空格分隔). '.' => 短哔, '-' => 长哔, 其余 => '?'
+  // 如果遇到 '/', 代表空格 => 额外长静音
+  const context = new (window.AudioContext || window.webkitAudioContext)();
+
+  const dotDur = 0.1;    // 点时长
+  const dashDur = 0.3;   // 横时长
+  const gapSym = 0.1;    // 同字符内符号间隔
+  const gapChar = 0.2;   // 字符间间隔
+  const gapSpace = 0.6;  // 空格(“/”)的静音
+
+  const tokens = morseStr.split(' ');
+
+  let totalTime = 0;
+  for (let t of tokens) {
+    if (t === '/') {
+      // 空格 => 仅用更长静音
+      totalTime += gapSpace;
+      continue;
+    }
+    // 普通字符
+    for (let ch of t) {
+      totalTime += (ch === '.') ? dotDur : (ch === '-' ? dashDur : dotDur);
+      totalTime += gapSym;
+    }
+    totalTime += gapChar;
+  }
+
+  const sampleRate = context.sampleRate;
+  const buffer = context.createBuffer(1, sampleRate * totalTime, sampleRate);
+  const channelData = buffer.getChannelData(0);
+
+  let currentSample = 0;
+  function writeBeep(durSec, volume=0.3) {
+    const length = Math.floor(durSec * sampleRate);
+    const freq = 600; // 600Hz
+    for (let i = 0; i < length; i++) {
+      channelData[currentSample++] = volume * Math.sin(2*Math.PI * freq * (i/sampleRate));
+    }
+  }
+  function writeSilence(durSec) {
+    const length = Math.floor(durSec * sampleRate);
+    for (let i=0; i<length; i++){
+      channelData[currentSample++] = 0;
+    }
+  }
+
+  // 生成波形
+  for (let t of tokens) {
+    if (t === '/') {
+      // 空格 => 更长静音
+      writeSilence(gapSpace);
+      continue;
+    }
+    // 普通字符
+    for (let ch of t) {
+      if (ch === '.') {
+        writeBeep(dotDur);
+        writeSilence(gapSym);
+      } else if (ch === '-') {
+        writeBeep(dashDur);
+        writeSilence(gapSym);
+      } else {
+        // '?'
+        writeBeep(dotDur, 0);
+        writeSilence(gapSym);
+      }
+    }
+    writeSilence(gapChar);
+  }
+
+  // 封装 WAV
+  const wavData = encodeWAV(buffer, sampleRate);
+  const blob = new Blob([wavData], { type: 'audio/wav' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `morse_audio_${Date.now()}.wav`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function encodeWAV(buffer, sampleRate=44100) {
+  const channelData = buffer.getChannelData(0);
+  const numFrames = channelData.length;
+  const numChannels = 1;
+  const bitsPerSample = 16;
+
+  const byteRate = (sampleRate * numChannels * bitsPerSample) / 8;
+  const blockAlign = (numChannels * bitsPerSample) / 8;
+  const dataSize = numFrames * numChannels * (bitsPerSample/8);
+  const bufferSize = 44 + dataSize;
+  const wavBuffer = new ArrayBuffer(bufferSize);
+  const view = new DataView(wavBuffer);
+
+  let offset = 0;
+  writeString(view, offset, 'RIFF'); offset+=4;
+  view.setUint32(offset, 36+dataSize, true); offset+=4;
+  writeString(view, offset, 'WAVE'); offset+=4;
+
+  writeString(view, offset, 'fmt '); offset+=4;
+  view.setUint32(offset, 16, true); offset+=4;
+  view.setUint16(offset, 1, true); offset+=2;
+  view.setUint16(offset, numChannels, true); offset+=2;
+  view.setUint32(offset, sampleRate, true); offset+=4;
+  view.setUint32(offset, byteRate, true); offset+=4;
+  view.setUint16(offset, blockAlign, true); offset+=2;
+  view.setUint16(offset, bitsPerSample, true); offset+=2;
+
+  writeString(view, offset, 'data'); offset+=4;
+  view.setUint32(offset, dataSize, true); offset+=4;
+
+  for (let i=0; i<channelData.length; i++){
+    const s = Math.max(-1, Math.min(1, channelData[i]));
+    const val = s<0 ? s*0x8000 : s*0x7FFF;
+    view.setInt16(offset, val, true);
+    offset+=2;
+  }
+
+  return wavBuffer;
+
+  function writeString(dv, pos, str) {
+    for (let i=0; i<str.length; i++){
+      dv.setUint8(pos+i, str.charCodeAt(i));
+    }
+  }
+}
+
+/***************************************************
+ * 5) 摩斯解密：若遇 "/" 则还原为空格
+ ***************************************************/
+const morseReverseMap = {};
+for (let c in morseMap) {
+  morseReverseMap[morseMap[c]] = c; // ".-" => "A"
+}
+
+function decodeMorseText() {
+  const input = document.getElementById('morseText').value.trim();
+  if (!input) {
+    alert("请粘贴摩斯码文本");
+    return;
+  }
+  // 以空格分隔 => ['-.--','---','..-','/',...]
+  const tokens = input.split(/\s+/);
+  let result = "";
+  for (let t of tokens) {
+    if (t === '/') {
+      // 斜杠代表空格
+      result += ' ';
+    } else if (morseReverseMap[t]) {
+      result += morseReverseMap[t];
+    } else {
+      // 若不存在映射，则用 "?" 占位
+      result += '?';
+    }
+  }
+  document.getElementById('decodedResult').textContent = "解码结果: " + result;
+}
+
+/***************************************************
+ * 6) 演示性：上传音频后解析(目前未实现真正摩斯识别)
+ ***************************************************/
+async function decodeMorseAudio() {
+  const fileInput = document.getElementById('morseAudioFile');
+  const resultEl = document.getElementById('audioDecodeResult');
+  if (!fileInput.files.length) {
+    alert("请选择音频文件");
+    return;
+  }
+  resultEl.textContent = "正在分析音频，请稍候...";
+  try {
+    const file = fileInput.files[0];
+    const arrayBuf = await file.arrayBuffer();
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const audioBuf = await audioCtx.decodeAudioData(arrayBuf);
+
+    // 获取主声道数据
+    const data = audioBuf.getChannelData(0);
+    const sampleRate = audioBuf.sampleRate;
+
+    // 1. 简单能量检测：滑动窗平均，检测有声音与静音段
+    const windowSize = Math.floor(0.01 * sampleRate); // 10ms
+    let env = [];
+    for (let i = 0; i < data.length; i += windowSize) {
+      let sum = 0;
+      for (let j = 0; j < windowSize && i + j < data.length; j++) {
+        sum += Math.abs(data[i + j]);
+      }
+      env.push(sum / windowSize);
+    }
+
+    // 2. 设定自适应阈值（1/5最大值），标记有声/静音
+    const maxEnv = Math.max(...env);
+    const threshold = maxEnv / 5;
+    let isBeep = env.map(v => v > threshold ? 1 : 0);
+
+    // 3. 按有声/静音分组，统计每段长度（以10ms为单位）
+    let segs = [];
+    let cur = isBeep[0], len = 1;
+    for (let i = 1; i < isBeep.length; i++) {
+      if (isBeep[i] === cur) {
+        len++;
+      } else {
+        segs.push({type: cur ? 'beep' : 'silence', len});
+        cur = isBeep[i]; len = 1;
+      }
+    }
+    segs.push({type: cur ? 'beep' : 'silence', len});
+
+    // 4. 统计所有 beep 段/静音段的时长，进行自动阈值归类
+    //    beep 分两类：点/划；静音分三类：符号间、字符间、单词间
+    const beepLens = segs.filter(s => s.type === 'beep').map(s => s.len);
+    const silLens = segs.filter(s => s.type === 'silence').map(s => s.len);
+
+    // 取最短beep平均值为"点"，较长2.5倍以上为"划"
+    const dotLen = Math.min(...beepLens);
+    const dashLenThresh = dotLen * 2.5;
+
+    // 静音同理：最短为符号间隔；大约3倍为字符间，6倍以上为单词间
+    const minSil = Math.min(...silLens);
+    const charGapThresh = minSil * 3;
+    const wordGapThresh = minSil * 6;
+
+    // 5. 还原摩斯字符串
+    let morse = '';
+    for (let seg of segs) {
+      if (seg.type === 'beep') {
+        if (seg.len < dashLenThresh) morse += '.';
+        else morse += '-';
+      } else {
+        // 静音，区分间隔
+        if (seg.len < charGapThresh) {
+          // 符号间，什么都不加
+        } else if (seg.len < wordGapThresh) {
+          morse += ' '; // 字符间
+        } else {
+          morse += ' / '; // 单词间
+        }
+      }
+    }
+
+    // 6. 用现有解码函数解码
+    // 清理多余空格
+    morse = morse.replace(/ +/g, ' ').replace(/ ?\/ ?/g, '/');
+    // 兼容 decodeMorseText 内部逻辑（空格分字符，/分单词）
+    let tokens = morse.split(' ');
+    let result = "";
+    for (let t of tokens) {
+      if (t === '/' || t === '') {
+        result += ' ';
+      } else if (morseReverseMap[t]) {
+        result += morseReverseMap[t];
+      } else {
+        result += '?';
+      }
+    }
+    resultEl.textContent = "音频解码：" + result + "\n[摩斯码: " + morse + "]";
+  } catch (err) {
+    resultEl.textContent = "音频解析失败: " + err.message;
+  }
+}
+
+window.convertToMorse = convertToMorse;
+window.downloadMorseAudio = downloadMorseAudio;
+window.decodeMorseText = decodeMorseText;
+window.decodeMorseAudio = decodeMorseAudio;
+</script>

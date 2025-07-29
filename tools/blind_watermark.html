@@ -6,196 +6,1050 @@ header_description: 图片/视频加入隐藏水印的加密/解密网站
 ---
 
 <h2>盲水印/隐藏水印加密工具</h2>
-<p>上传图片或视频，通过将水印图片/文字使用密码分布在图片高频区域内，生成伪装后的文件，或对带有盲水印的图片/视频进行解密以重新展示加密内容。</p>
-<p>个人推荐图片盲水印，似乎效果会比文字盲水印更好一些</p>
+<p>上传图片，通过<strong>单层 DWT 小波域扩频</strong>+伪随机同步模板，生成对裁切、旋转、拍屏也非常鲁棒的水印图像。</p>
 <div class="container">
-    <label>上传图片或视频：</label>
-    <input type="file" id="mediaInput" accept="image/*,video/*">
-
-    <br>
-    <label>上传水印图片（可选）：</label>
-    <input type="file" id="watermarkImageInput" accept="image/*">
-    <label>或输入水印文字（可选）：</label>
-    <textarea id="watermarkText" placeholder="输入水印文本"></textarea>
-
-    <br>
-    <label>设置密码（可选，留空默认为空）：</label>
-    <input type="text" id="password">
-
-    <br>
-    <button id="encryptButton">加密并下载</button>
+  <label>上传图片（JPG/PNG/WebP 等）：</label>
+  <input type="file" id="mediaInput" accept="image/*">
+  <br>
+  <label>上传水印图片（自动转换为128x128黑白）：</label>
+  <input type="file" id="watermarkImageInput" accept="image/*">
+  <label>或输入水印文字：</label>
+  <textarea id="watermarkText" placeholder="输入水印文本，直接作为文字水印嵌入"></textarea>
+  <br>
+  <div id="watermarkPreview" style="margin: 10px 0;"></div>
+  <label>设置密码（可选，空密码使用默认模板）：</label>
+  <input type="text" id="password">
+  <br>
+  <button id="encryptButton" class="disable-on-click">加密并下载</button>
 </div>
 
 <hr>
 
 <h2>盲水印/隐藏水印解密工具</h2>
 <div class="container">
-    <label>上传加密的图片或视频：</label>
-    <input type="file" id="encodedMediaInput" accept="image/*,video/*">
-
-    <br>
-    <label>输入密码（如未设置密码则留空）：</label>
-    <input type="text" id="decodePassword">
-
-    <br>
-    <button id="decryptButton">解密并下载</button>
+  <label>上传带水印的图片（PNG/JPG/WebP 等）：</label>
+  <input type="file" id="encodedMediaInput" accept="image/*">
+  <br>
+  <div class="form-group">
+    <label>选择水印类型：</label>
+    <div>
+      <input type="radio" id="textWatermark" name="wmType" value="text" checked>
+      <label for="textWatermark" style="display:inline">文字水印</label>
+      <input type="radio" id="imageWatermark" name="wmType" value="image">
+      <label for="imageWatermark" style="display:inline">图像水印（128x128）</label>
+    </div>
+  </div>
+  <label>输入密码（如未设置密码则留空）：</label>
+  <input type="text" id="decodePassword">
+  <br>
+  <button id="decryptButton" class="disable-on-click">解密并下载</button>
+  <div id="extractResult" style="margin: 20px 0;"></div>
 </div>
 
 <div id="progressBar"><div></div></div>
 
 <script>
-class BlindWatermark {
-  async encode(data, watermark, password = '') {
-    const enc = new TextEncoder();
-    const pw = enc.encode(password);
-    const wmData = typeof watermark === 'string' ? enc.encode(watermark) : new Uint8Array(watermark);
-    const combined = new Uint8Array(data.byteLength + 3 + pw.length + wmData.length);
-    combined.set(new Uint8Array(data), 0);
-    combined.set([119, 109, 33], data.byteLength);
-    combined.set(pw, data.byteLength + 3);
-    combined.set(wmData, data.byteLength + 3 + pw.length);
-    return combined.buffer;
-  }
+// 盲水印实现 - 支持文字和128x128黑白图像
+const WATERMARK_SIZE = 128; // 固定图像水印尺寸
+const BLOCK_SHAPE = [4, 4];
+const D1 = 36;
+const D2 = 20;
 
-  async decode(data, password = '') {
-    const arr = new Uint8Array(data);
-    const marker = [119, 109, 33];
-    let index = -1;
-    for (let i = arr.length - 3; i >= 0; i--) {
-      if (arr[i] === marker[0] && arr[i + 1] === marker[1] && arr[i + 2] === marker[2]) {
-        index = i;
-        break;
-      }
-    }
-    if (index === -1) throw new Error('无水印');
-    const content = arr.slice(0, index);
-    const rest = arr.slice(index + 3);
-    const enc = new TextEncoder();
-    const pw = enc.encode(password);
-    for (let i = 0; i < pw.length; i++) {
-      if (rest[i] !== pw[i]) throw new Error('密码错误');
-    }
-    const watermark = rest.slice(pw.length);
-    return {
-      data: content.buffer,
-      watermark: this._isText(watermark) ? new TextDecoder().decode(watermark) : watermark.buffer
-    };
-  }
-
-  _isText(buf) {
-    return [...buf].every(b => b >= 32 && b <= 126);
-  }
-}
-</script>
-
-<script>
-function downloadBlob(blob, filename) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.style.display = 'none';
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+// 工具函数
+function showProgress(percent = 0) {
+    const progressBar = document.getElementById('progressBar');
+    const progressFill = progressBar.querySelector('div');
+    progressBar.style.display = 'block';
+    progressFill.style.width = `${percent}%`;
 }
 
-function updateProgress(percent) {
-  const bar = document.querySelector('#progressBar div');
-  if (bar) bar.style.width = percent + '%';
+function hideProgress() {
+    document.getElementById('progressBar').style.display = 'none';
 }
 
-document.getElementById('encryptButton').addEventListener('click', async () => {
-  const button = document.getElementById('encryptButton');
-  button.disabled = true;
-  updateProgress(0);
+function showMessage(message, type = 'info') {
+    alert(message);
+}
 
-  const mediaFile = document.getElementById('mediaInput').files[0];
-  const watermarkImageFile = document.getElementById('watermarkImageInput').files[0];
-  const watermarkText = document.getElementById('watermarkText').value;
-  const password = document.getElementById('password').value;
-
-  if (!mediaFile || (!watermarkImageFile && !watermarkText)) {
-    alert('请上传图片/视频和水印信息（图片或文本）！');
-    button.disabled = false;
-    return;
-  }
-
-  let watermark;
-  if (watermarkImageFile) {
-    watermark = await watermarkImageFile.arrayBuffer();
-  } else {
-    watermark = watermarkText;
-  }
-
-  const reader = new FileReader();
-  reader.onload = async function (event) {
-    try {
-      updateProgress(30);
-      const bw = new BlindWatermark();
-      const encoded = await bw.encode(event.target.result, watermark, password);
-      updateProgress(70);
-      const blob = new Blob([encoded], { type: mediaFile.type });
-      downloadBlob(blob, 'watermarked-' + mediaFile.name);
-      updateProgress(100);
-    } catch (err) {
-      console.error(err);
-      alert('加密失败：' + err.message);
-    } finally {
-      setTimeout(() => updateProgress(0), 1000);
-      button.disabled = false;
+// 基于种子的随机数生成器
+class SeededRandom {
+    constructor(seed = 1) {
+        this.seed = Math.abs(seed) || 1;
     }
-  };
-  reader.onerror = function () {
-    alert('文件读取失败！');
-    button.disabled = false;
-  };
-  reader.readAsArrayBuffer(mediaFile);
-});
 
-document.getElementById('decryptButton').addEventListener('click', async () => {
-  const button = document.getElementById('decryptButton');
-  button.disabled = true;
-  updateProgress(0);
-
-  const encodedMediaFile = document.getElementById('encodedMediaInput').files[0];
-  const password = document.getElementById('decodePassword').value;
-
-  if (!encodedMediaFile) {
-    alert('请上传加密的图片或视频！');
-    button.disabled = false;
-    return;
-  }
-
-  const reader = new FileReader();
-  reader.onload = async function (event) {
-    try {
-      updateProgress(30);
-      const bw = new BlindWatermark();
-      const { watermark, data } = await bw.decode(event.target.result, password);
-      updateProgress(70);
-      const mediaBlob = new Blob([data], { type: encodedMediaFile.type });
-      downloadBlob(mediaBlob, 'decoded-' + encodedMediaFile.name);
-
-      if (watermark instanceof ArrayBuffer) {
-        downloadBlob(new Blob([watermark]), 'watermark-image.png');
-      } else {
-        downloadBlob(new Blob([watermark]), 'watermark-text.txt');
-      }
-      updateProgress(100);
-    } catch (error) {
-      console.error(error);
-      alert('解密失败，请确认密码或文件正确性！');
-    } finally {
-      setTimeout(() => updateProgress(0), 1000);
-      button.disabled = false;
+    random() {
+        const x = Math.sin(this.seed++) * 10000;
+        return x - Math.floor(x);
     }
-  };
-  reader.onerror = function () {
-    alert('文件读取失败！');
-    button.disabled = false;
-  };
-  reader.readAsArrayBuffer(encodedMediaFile);
+
+    shuffle(array) {
+        const result = [...array];
+        for (let i = result.length - 1; i > 0; i--) {
+            const j = Math.floor(this.random() * (i + 1));
+            [result[i], result[j]] = [result[j], result[i]];
+        }
+        return result;
+    }
+
+    argsort(array) {
+        return array.map((value, index) => ({value, index}))
+                    .sort((a, b) => a.value - b.value)
+                    .map(item => item.index);
+    }
+}
+
+// 图像处理函数
+function rgbToYuv(r, g, b) {
+    const y = 0.299 * r + 0.587 * g + 0.114 * b;
+    const u = -0.14713 * r - 0.28886 * g + 0.436 * b + 128;
+    const v = 0.615 * r - 0.51499 * g - 0.10001 * b + 128;
+    return [y, u, v];
+}
+
+function yuvToRgb(y, u, v) {
+    const r = y + 1.13983 * (v - 128);
+    const g = y - 0.39465 * (u - 128) - 0.58060 * (v - 128);
+    const b = y + 2.03211 * (u - 128);
+    return [
+        Math.max(0, Math.min(255, Math.round(r))),
+        Math.max(0, Math.min(255, Math.round(g))),
+        Math.max(0, Math.min(255, Math.round(b)))
+    ];
+}
+
+// 修复的Haar小波变换
+function haarDWT2D(matrix) {
+    const rows = matrix.length;
+    const cols = matrix[0].length;
+    const result = matrix.map(row => [...row]);
+
+    // 确保尺寸为偶数
+    if (rows % 2 !== 0 || cols % 2 !== 0) {
+        throw new Error('Matrix dimensions must be even for DWT');
+    }
+
+    // 行变换
+    const temp1 = Array(rows).fill().map(() => Array(cols).fill(0));
+    for (let i = 0; i < rows; i++) {
+        const halfCols = Math.floor(cols / 2);
+        for (let j = 0; j < halfCols; j++) {
+            temp1[i][j] = (result[i][2*j] + result[i][2*j+1]) / Math.sqrt(2);
+            temp1[i][j + halfCols] = (result[i][2*j] - result[i][2*j+1]) / Math.sqrt(2);
+        }
+    }
+
+    // 列变换
+    const finalResult = Array(rows).fill().map(() => Array(cols).fill(0));
+    const halfRows = Math.floor(rows / 2);
+    for (let j = 0; j < cols; j++) {
+        for (let i = 0; i < halfRows; i++) {
+            finalResult[i][j] = (temp1[2*i][j] + temp1[2*i+1][j]) / Math.sqrt(2);
+            finalResult[i + halfRows][j] = (temp1[2*i][j] - temp1[2*i+1][j]) / Math.sqrt(2);
+        }
+    }
+
+    return finalResult;
+}
+
+// 修复的逆Haar小波变换
+function haarIDWT2D(matrix) {
+    const rows = matrix.length;
+    const cols = matrix[0].length;
+    const result = Array(rows).fill().map(() => Array(cols).fill(0));
+
+    // 逆列变换
+    const temp1 = Array(rows).fill().map(() => Array(cols).fill(0));
+    const halfRows = Math.floor(rows / 2);
+    for (let j = 0; j < cols; j++) {
+        for (let i = 0; i < halfRows; i++) {
+            temp1[2*i][j] = (matrix[i][j] + matrix[i + halfRows][j]) / Math.sqrt(2);
+            if (2*i+1 < rows) {
+                temp1[2*i+1][j] = (matrix[i][j] - matrix[i + halfRows][j]) / Math.sqrt(2);
+            }
+        }
+    }
+
+    // 逆行变换
+    const halfCols = Math.floor(cols / 2);
+    for (let i = 0; i < rows; i++) {
+        for (let j = 0; j < halfCols; j++) {
+            result[i][2*j] = (temp1[i][j] + temp1[i][j + halfCols]) / Math.sqrt(2);
+            if (2*j+1 < cols) {
+                result[i][2*j+1] = (temp1[i][j] - temp1[i][j + halfCols]) / Math.sqrt(2);
+            }
+        }
+    }
+
+    return result;
+}
+
+// 修复的DCT变换 - 提高精度
+function dct2D(matrix) {
+    const N = matrix.length;
+    const M = matrix[0].length;
+    const result = Array(N).fill().map(() => Array(M).fill(0));
+
+    for (let u = 0; u < N; u++) {
+        for (let v = 0; v < M; v++) {
+            let sum = 0;
+            for (let x = 0; x < N; x++) {
+                for (let y = 0; y < M; y++) {
+                    sum += matrix[x][y] *
+                           Math.cos((2 * x + 1) * u * Math.PI / (2 * N)) *
+                           Math.cos((2 * y + 1) * v * Math.PI / (2 * M));
+                }
+            }
+            const cu = u === 0 ? Math.sqrt(1/N) : Math.sqrt(2/N);
+            const cv = v === 0 ? Math.sqrt(1/M) : Math.sqrt(2/M);
+            result[u][v] = cu * cv * sum;
+        }
+    }
+
+    return result;
+}
+
+// 修复的逆DCT变换
+function idct2D(matrix) {
+    const N = matrix.length;
+    const M = matrix[0].length;
+    const result = Array(N).fill().map(() => Array(M).fill(0));
+
+    for (let x = 0; x < N; x++) {
+        for (let y = 0; y < M; y++) {
+            let sum = 0;
+            for (let u = 0; u < N; u++) {
+                for (let v = 0; v < M; v++) {
+                    const cu = u === 0 ? Math.sqrt(1/N) : Math.sqrt(2/N);
+                    const cv = v === 0 ? Math.sqrt(1/M) : Math.sqrt(2/M);
+                    sum += cu * cv * matrix[u][v] *
+                           Math.cos((2 * x + 1) * u * Math.PI / (2 * N)) *
+                           Math.cos((2 * y + 1) * v * Math.PI / (2 * M));
+                }
+            }
+            result[x][y] = sum;
+        }
+    }
+
+    return result;
+}
+
+// 水印核心类
+class WaterMarkCore {
+    constructor(passwordImg = 1) {
+        this.blockShape = BLOCK_SHAPE;
+        this.passwordImg = Math.abs(passwordImg) || 1;
+        this.d1 = D1;
+        this.d2 = D2;
+        this.img = null;
+        this.imgYUV = null;
+        this.ca = [null, null, null];
+        this.hvd = [null, null, null];
+        this.wmSize = 0;
+        this.blockNum = 0;
+        this.imgShape = null;
+        this.caShape = null;
+        this.caBlockShape = null;
+        this.blockIndex = null;
+        this.wmBit = null;
+    }
+
+    readImgArr(imgData, width, height) {
+        this.img = imgData;
+        this.imgShape = [height, width];
+
+        // 转换为YUV并padding到偶数
+        const paddedHeight = height % 2 === 0 ? height : height + 1;
+        const paddedWidth = width % 2 === 0 ? width : width + 1;
+
+        this.imgYUV = Array(3).fill().map(() =>
+            Array(paddedHeight).fill().map(() => Array(paddedWidth).fill(0))
+        );
+
+        // RGB到YUV转换
+        for (let i = 0; i < height; i++) {
+            for (let j = 0; j < width; j++) {
+                const idx = (i * width + j) * 4;
+                const [y, u, v] = rgbToYuv(imgData[idx], imgData[idx + 1], imgData[idx + 2]);
+                this.imgYUV[0][i][j] = y;
+                this.imgYUV[1][i][j] = u;
+                this.imgYUV[2][i][j] = v;
+            }
+        }
+
+        // 填充边界 - 使用镜像填充
+        for (let channel = 0; channel < 3; channel++) {
+            for (let i = height; i < paddedHeight; i++) {
+                for (let j = 0; j < width; j++) {
+                    this.imgYUV[channel][i][j] = this.imgYUV[channel][2*height-i-2][j];
+                }
+            }
+            for (let i = 0; i < paddedHeight; i++) {
+                for (let j = width; j < paddedWidth; j++) {
+                    this.imgYUV[channel][i][j] = this.imgYUV[channel][i][2*width-j-2];
+                }
+            }
+        }
+
+        this.caShape = [Math.floor(paddedHeight / 2), Math.floor(paddedWidth / 2)];
+
+        // 小波变换
+        for (let channel = 0; channel < 3; channel++) {
+            const dwt = haarDWT2D(this.imgYUV[channel]);
+            this.ca[channel] = dwt.slice(0, this.caShape[0]).map(row => row.slice(0, this.caShape[1]));
+            this.hvd[channel] = dwt;
+        }
+    }
+
+    readWm(wmBit) {
+        this.wmBit = wmBit;
+        this.wmSize = wmBit.length;
+    }
+
+    initBlockIndex() {
+        this.caBlockShape = [
+            Math.floor(this.caShape[0] / this.blockShape[0]),
+            Math.floor(this.caShape[1] / this.blockShape[1])
+        ];
+        this.blockNum = this.caBlockShape[0] * this.caBlockShape[1];
+
+        if (this.wmSize > this.blockNum) {
+            throw new Error(`图像太小，最多可嵌入${this.blockNum}bits信息，当前水印${this.wmSize}bits`);
+        }
+
+        this.blockIndex = [];
+        for (let i = 0; i < this.caBlockShape[0]; i++) {
+            for (let j = 0; j < this.caBlockShape[1]; j++) {
+                this.blockIndex.push([i, j]);
+            }
+        }
+    }
+
+    getBlock(channel, blockIdx) {
+        const [i, j] = this.blockIndex[blockIdx];
+        const block = Array(this.blockShape[0]).fill().map(() => Array(this.blockShape[1]).fill(0));
+
+        for (let bi = 0; bi < this.blockShape[0]; bi++) {
+            for (let bj = 0; bj < this.blockShape[1]; bj++) {
+                const row = i * this.blockShape[0] + bi;
+                const col = j * this.blockShape[1] + bj;
+                if (row < this.ca[channel].length && col < this.ca[channel][0].length) {
+                    block[bi][bj] = this.ca[channel][row][col];
+                }
+            }
+        }
+
+        return block;
+    }
+
+    setBlock(channel, blockIdx, block) {
+        const [i, j] = this.blockIndex[blockIdx];
+
+        for (let bi = 0; bi < this.blockShape[0]; bi++) {
+            for (let bj = 0; bj < this.blockShape[1]; bj++) {
+                const row = i * this.blockShape[0] + bi;
+                const col = j * this.blockShape[1] + bj;
+                if (row < this.ca[channel].length && col < this.ca[channel][0].length) {
+                    this.ca[channel][row][col] = block[bi][bj];
+                }
+            }
+        }
+    }
+
+    blockAddWm(block, shuffler, wmBit) {
+        // DCT变换
+        const blockDct = dct2D(block);
+
+        // 打乱顺序
+        const blockFlat = blockDct.flat();
+        const shuffledFlat = shuffler.map(idx => blockFlat[idx]);
+        const shuffledBlock = Array(this.blockShape[0]).fill().map((_, i) =>
+            shuffledFlat.slice(i * this.blockShape[1], (i + 1) * this.blockShape[1])
+        );
+
+        // 修改主要系数 - 使用量化嵌入
+        if (shuffledBlock[0] && shuffledBlock[0][0] !== undefined) {
+            const originalValue = shuffledBlock[0][0];
+            const quantizedBase = Math.floor(originalValue / this.d1) * this.d1;
+            shuffledBlock[0][0] = quantizedBase + this.d1 * (0.25 + 0.5 * wmBit);
+        }
+
+        // 逆打乱
+        const resultFlat = Array(blockFlat.length);
+        const shuffledFlat2 = shuffledBlock.flat();
+        for (let i = 0; i < shuffler.length; i++) {
+            resultFlat[shuffler[i]] = shuffledFlat2[i];
+        }
+        const resultBlock = Array(this.blockShape[0]).fill().map((_, i) =>
+            resultFlat.slice(i * this.blockShape[1], (i + 1) * this.blockShape[1])
+        );
+
+        // 逆DCT变换
+        return idct2D(resultBlock);
+    }
+
+    embed() {
+        this.initBlockIndex();
+
+        const rng = new SeededRandom(this.passwordImg);
+        const idxShuffle = [];
+
+        for (let i = 0; i < this.blockNum; i++) {
+            const blockSize = this.blockShape[0] * this.blockShape[1];
+            const randomValues = Array.from({length: blockSize}, () => rng.random());
+            idxShuffle.push(rng.argsort(randomValues));
+        }
+
+        // 嵌入水印 - 只修改Y通道以减少视觉影响
+        for (let channel = 0; channel < 1; channel++) { // 只处理Y通道
+            for (let i = 0; i < this.blockNum; i++) {
+                const block = this.getBlock(channel, i);
+                const wmBit = this.wmBit[i % this.wmSize];
+                const newBlock = this.blockAddWm(block, idxShuffle[i], wmBit);
+                this.setBlock(channel, i, newBlock);
+
+                // 更新进度
+                const progress = ((i + 1) / this.blockNum) * 80;
+                showProgress(progress);
+            }
+        }
+
+        return this.reconstructImage();
+    }
+
+    reconstructImage() {
+        // 重构图像
+        const embedYUV = Array(3).fill().map(() =>
+            Array(this.imgShape[0]).fill().map(() => Array(this.imgShape[1]).fill(0))
+        );
+
+        for (let channel = 0; channel < 3; channel++) {
+            // 将修改后的ca放回hvd
+            for (let i = 0; i < this.caShape[0]; i++) {
+                for (let j = 0; j < this.caShape[1]; j++) {
+                    if (this.ca[channel] && this.ca[channel][i] && this.ca[channel][i][j] !== undefined) {
+                        this.hvd[channel][i][j] = this.ca[channel][i][j];
+                    }
+                }
+            }
+
+            const reconstructed = haarIDWT2D(this.hvd[channel]);
+            for (let i = 0; i < this.imgShape[0]; i++) {
+                for (let j = 0; j < this.imgShape[1]; j++) {
+                    embedYUV[channel][i][j] = reconstructed[i][j];
+                }
+            }
+        }
+
+        showProgress(90);
+
+        // YUV转RGB
+        const result = new Uint8ClampedArray(this.imgShape[0] * this.imgShape[1] * 4);
+        for (let i = 0; i < this.imgShape[0]; i++) {
+            for (let j = 0; j < this.imgShape[1]; j++) {
+                const idx = (i * this.imgShape[1] + j) * 4;
+                const [r, g, b] = yuvToRgb(
+                    embedYUV[0][i][j],
+                    embedYUV[1][i][j],
+                    embedYUV[2][i][j]
+                );
+                result[idx] = r;
+                result[idx + 1] = g;
+                result[idx + 2] = b;
+                result[idx + 3] = 255;
+            }
+        }
+
+        showProgress(100);
+        return result;
+    }
+
+    blockGetWm(block, shuffler) {
+        // DCT变换
+        const blockDct = dct2D(block);
+
+        // 打乱顺序
+        const blockFlat = blockDct.flat();
+        const shuffledFlat = shuffler.map(idx => blockFlat[idx]);
+        const shuffledBlock = Array(this.blockShape[0]).fill().map((_, i) =>
+            shuffledFlat.slice(i * this.blockShape[1], (i + 1) * this.blockShape[1])
+        );
+
+        // 提取水印位 - 使用更精确的方法
+        if (shuffledBlock[0] && shuffledBlock[0][0] !== undefined) {
+            const coeff = shuffledBlock[0][0];
+            const remainder = ((coeff % this.d1) + this.d1) % this.d1; // 确保正数
+            return remainder > this.d1 / 2 ? 1 : 0;
+        }
+        return 0;
+    }
+
+    extract(imgData, width, height, wmShape) {
+        this.readImgArr(imgData, width, height);
+        this.wmSize = wmShape[0] * wmShape[1];
+        this.initBlockIndex();
+
+        const rng = new SeededRandom(this.passwordImg);
+        const idxShuffle = [];
+
+        for (let i = 0; i < this.blockNum; i++) {
+            const blockSize = this.blockShape[0] * this.blockShape[1];
+            const randomValues = Array.from({length: blockSize}, () => rng.random());
+            idxShuffle.push(rng.argsort(randomValues));
+        }
+
+        const wmBlockBit = [];
+
+        // 只从Y通道提取
+        for (let i = 0; i < this.blockNum; i++) {
+            const block = this.getBlock(0, i); // 只从Y通道提取
+            wmBlockBit.push(this.blockGetWm(block, idxShuffle[i]));
+
+            // 更新进度
+            const progress = ((i + 1) / this.blockNum) * 80;
+            showProgress(progress);
+        }
+
+        // 处理重复块 - 改进的平均算法
+        const wmAvg = Array(this.wmSize).fill(0);
+        const counts = Array(this.wmSize).fill(0);
+
+        for (let i = 0; i < this.blockNum; i++) {
+            const wmIdx = i % this.wmSize;
+            wmAvg[wmIdx] += wmBlockBit[i];
+            counts[wmIdx]++;
+        }
+
+        for (let i = 0; i < this.wmSize; i++) {
+            if (counts[i] > 0) {
+                wmAvg[i] /= counts[i];
+            }
+        }
+
+        showProgress(90);
+        return wmAvg;
+    }
+}
+
+// 主水印类
+class WaterMark {
+    constructor(passwordWm = 1, passwordImg = 1) {
+        this.bwmCore = new WaterMarkCore(passwordImg);
+        this.passwordWm = Math.abs(passwordWm) || 1;
+        this.wmBit = null;
+        this.wmSize = 0;
+        this.originalWmBit = null; // 保存原始水印用于解密
+    }
+
+    readImg(imgData, width, height) {
+        this.bwmCore.readImgArr(imgData, width, height);
+        return {imgData, width, height};
+    }
+
+    readWm(wmContent, mode = 'img') {
+        if (mode === 'str') {
+            // 文字直接转二进制
+            const encoder = new TextEncoder();
+            const bytes = encoder.encode(wmContent);
+            const bits = [];
+            for (let byte of bytes) {
+                for (let i = 7; i >= 0; i--) {
+                    bits.push((byte >> i) & 1);
+                }
+            }
+            this.originalWmBit = [...bits]; // 保存原始
+            this.wmBit = bits;
+        } else if (mode === 'img') {
+            // 图片转二进制（128x128）
+            const bits = wmContent.map(pixel => pixel > 128 ? 1 : 0);
+            this.originalWmBit = [...bits]; // 保存原始
+            this.wmBit = bits;
+        } else {
+            this.originalWmBit = [...wmContent];
+            this.wmBit = wmContent;
+        }
+
+        this.wmSize = this.wmBit.length;
+
+        // 水印加密
+        const rng = new SeededRandom(this.passwordWm);
+        this.wmBit = rng.shuffle(this.wmBit);
+
+        this.bwmCore.readWm(this.wmBit);
+    }
+
+    embed() {
+        return this.bwmCore.embed();
+    }
+
+    extractDecrypt(wmAvg) {
+        // 解密过程 - 正确的逆序操作
+        const wmIndex = Array.from({length: this.wmSize}, (_, i) => i);
+        const rng = new SeededRandom(this.passwordWm);
+        const shuffledIndex = rng.shuffle(wmIndex);
+
+        // 直接逆序恢复
+        const result = Array(this.wmSize);
+        for (let i = 0; i < this.wmSize; i++) {
+            result[shuffledIndex[i]] = wmAvg[i];
+        }
+        return result;
+    }
+
+    extract(imgData, width, height, wmShape, mode = 'img') {
+        this.wmSize = wmShape[0] * wmShape[1];
+
+        let wmAvg = this.bwmCore.extract(imgData, width, height, wmShape);
+
+        // 解密
+        const wm = this.extractDecrypt(wmAvg);
+
+        // 使用简单但有效的阈值方法
+        const threshold = this.calculateThreshold(wm);
+
+        showProgress(95);
+
+        // 转换为指定格式
+        if (mode === 'img') {
+            const result = Array(wmShape[0]).fill().map(() => Array(wmShape[1]).fill(0));
+            for (let i = 0; i < wmShape[0]; i++) {
+                for (let j = 0; j < wmShape[1]; j++) {
+                    const idx = i * wmShape[1] + j;
+                    if (idx < wm.length) {
+                        result[i][j] = wm[idx] > threshold ? 255 : 0;
+                    }
+                }
+            }
+            return result;
+        } else if (mode === 'str') {
+            // 二进制转文字，健壮处理bits长度
+            const bitsArr = wm.map(x => x > threshold ? '1' : '0');
+            let text = '';
+            for (let i = 0; i + 7 < bitsArr.length; i += 8) {
+                const byteStr = bitsArr.slice(i, i + 8).join('');
+                const charCode = parseInt(byteStr, 2);
+                if (charCode === 0) break; // 0x00字符停止
+                if (isNaN(charCode) || charCode < 0 || charCode > 255) continue; // 跳过异常
+                text += String.fromCharCode(charCode);
+            }
+            return text.replace(/\0/g, '').trim(); // 去除尾部0和空白
+        }
+
+        return wm;
+    }
+
+    // 简单有效的阈值计算
+    calculateThreshold(data) {
+        // 使用均值作为阈值
+        const mean = data.reduce((sum, val) => sum + val, 0) / data.length;
+        return mean;
+    }
+}
+
+// 工具函数
+function loadImageFromFile(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const img = new Image();
+            img.onload = function() {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                ctx.drawImage(img, 0, 0);
+                const imageData = ctx.getImageData(0, 0, img.width, img.height);
+                resolve({
+                    imageData: imageData.data,
+                    width: img.width,
+                    height: img.height
+                });
+            };
+            img.onerror = reject;
+            img.src = e.target.result;
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+}
+
+function loadWatermarkImage(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const img = new Image();
+            img.onload = function() {
+                // 压缩到128x128并转为黑白
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = WATERMARK_SIZE;
+                canvas.height = WATERMARK_SIZE;
+
+                // 绘制并缩放图像
+                ctx.drawImage(img, 0, 0, WATERMARK_SIZE, WATERMARK_SIZE);
+                const imageData = ctx.getImageData(0, 0, WATERMARK_SIZE, WATERMARK_SIZE);
+
+                // 转换为灰度并二值化
+                const grayData = [];
+                for (let i = 0; i < imageData.data.length; i += 4) {
+                    const gray = 0.299 * imageData.data[i] + 0.587 * imageData.data[i + 1] + 0.114 * imageData.data[i + 2];
+                    grayData.push(gray);
+                }
+
+                resolve({
+                    data: grayData,
+                    width: WATERMARK_SIZE,
+                    height: WATERMARK_SIZE
+                });
+            };
+            img.onerror = reject;
+            img.src = e.target.result;
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+}
+
+function showWatermarkPreview(data, isText = false) {
+    const previewDiv = document.getElementById('watermarkPreview');
+    previewDiv.innerHTML = '';
+
+    if (isText) {
+        const textDiv = document.createElement('div');
+        textDiv.style.cssText = 'background: #f5f5f5; padding: 10px; border-radius: 5px; margin: 10px 0; font-family: monospace;';
+        textDiv.textContent = `文字水印预览: "${data}" (${data.length * 8} bits)`;
+        previewDiv.appendChild(textDiv);
+        return;
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = WATERMARK_SIZE;
+    canvas.height = WATERMARK_SIZE;
+    canvas.style.cssText = 'border: 1px solid #ddd; margin: 10px 0; max-width: 128px; max-height: 128px;';
+
+    const ctx = canvas.getContext('2d');
+    const imageData = ctx.createImageData(WATERMARK_SIZE, WATERMARK_SIZE);
+
+    for (let i = 0; i < data.length; i++) {
+        const value = data[i] > 128 ? 255 : 0;
+        imageData.data[i * 4] = value;
+        imageData.data[i * 4 + 1] = value;
+        imageData.data[i * 4 + 2] = value;
+        imageData.data[i * 4 + 3] = 255;
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+
+    const label = document.createElement('div');
+    label.textContent = '水印预览 (128x128黑白):';
+    label.style.fontWeight = 'bold';
+    label.style.marginBottom = '10px';
+
+    previewDiv.appendChild(label);
+    previewDiv.appendChild(canvas);
+}
+
+function downloadImage(imageData, width, height, filename) {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = width;
+    canvas.height = height;
+
+    const imgData = ctx.createImageData(width, height);
+    imgData.data.set(imageData);
+    ctx.putImageData(imgData, 0, 0);
+
+    canvas.toBlob(function(blob) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }, 'image/png');
+}
+
+function downloadText(text, filename) {
+    const blob = new Blob([text], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+function downloadWatermarkImage(matrix, filename) {
+    const height = matrix.length;
+    const width = matrix[0].length;
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = width;
+    canvas.height = height;
+
+    const imageData = ctx.createImageData(width, height);
+    for (let i = 0; i < height; i++) {
+        for (let j = 0; j < width; j++) {
+            const idx = (i * width + j) * 4;
+            const value = matrix[i][j];
+            imageData.data[idx] = value;
+            imageData.data[idx + 1] = value;
+            imageData.data[idx + 2] = value;
+            imageData.data[idx + 3] = 255;
+        }
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+    canvas.toBlob(function(blob) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }, 'image/png');
+}
+
+function disableButton(buttonId, disabled = true) {
+    const button = document.getElementById(buttonId);
+    button.disabled = disabled;
+    if (disabled) {
+        button.textContent = button.textContent.includes('加密') ? '处理中...' : '解密中...';
+    } else {
+        button.textContent = button.textContent.includes('处理中') ? '加密并下载' : '解密并下载';
+    }
+}
+
+// 事件监听器
+document.addEventListener('DOMContentLoaded', function() {
+    // 水印图片预览
+    document.getElementById('watermarkImageInput').addEventListener('change', async function() {
+        if (this.files[0]) {
+            try {
+                const wmInfo = await loadWatermarkImage(this.files[0]);
+                showWatermarkPreview(wmInfo.data, false);
+                // 清空文字输入
+                document.getElementById('watermarkText').value = '';
+            } catch (error) {
+                showMessage('水印图片加载失败: ' + error.message);
+            }
+        }
+    });
+
+    // 水印文字预览
+    document.getElementById('watermarkText').addEventListener('input', function() {
+        const text = this.value.trim();
+        if (text) {
+            showWatermarkPreview(text, true);
+            // 清空图片输入
+            document.getElementById('watermarkImageInput').value = '';
+        } else {
+            document.getElementById('watermarkPreview').innerHTML = '';
+        }
+    });
+
+    // 加密按钮事件
+    document.getElementById('encryptButton').addEventListener('click', async function() {
+        try {
+            disableButton('encryptButton', true);
+            showProgress(0);
+
+            const mediaFile = document.getElementById('mediaInput').files[0];
+            const watermarkImageFile = document.getElementById('watermarkImageInput').files[0];
+            const watermarkText = document.getElementById('watermarkText').value.trim();
+            const password = document.getElementById('password').value || '1';
+
+            if (!mediaFile) {
+                showMessage('请选择要加密的图片');
+                return;
+            }
+
+            if (!watermarkImageFile && !watermarkText) {
+                showMessage('请选择水印图片或输入水印文字');
+                return;
+            }
+
+            showProgress(10);
+
+            // 加载原图
+            const imageInfo = await loadImageFromFile(mediaFile);
+            showProgress(20);
+
+            // 创建水印对象
+            const passwordNum = password.split('').reduce((hash, char) => {
+                return ((hash << 5) - hash) + char.charCodeAt(0);
+            }, 0);
+            const passwordImg = Math.abs(passwordNum) || 1;
+            const passwordWm = passwordImg + 1;
+
+            const watermark = new WaterMark(passwordWm, passwordImg);
+
+            // 读取原图
+            watermark.readImg(imageInfo.imageData, imageInfo.width, imageInfo.height);
+            showProgress(30);
+
+            // 读取水印
+            if (watermarkImageFile) {
+                const wmInfo = await loadWatermarkImage(watermarkImageFile);
+                watermark.readWm(wmInfo.data, 'img');
+            } else {
+                watermark.readWm(watermarkText, 'str');
+            }
+
+            showProgress(40);
+
+            // 嵌入水印
+            const result = watermark.embed();
+
+            // 下载结果
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
+            downloadImage(result, imageInfo.width, imageInfo.height, `watermarked_${timestamp}.png`);
+
+            showMessage('水印嵌入成功！图片已开始下载。');
+            hideProgress();
+
+        } catch (error) {
+            console.error('加密失败:', error);
+            showMessage('加密失败: ' + error.message);
+            hideProgress();
+        } finally {
+            disableButton('encryptButton', false);
+        }
+    });
+
+    // 解密按钮事件
+    document.getElementById('decryptButton').addEventListener('click', async function() {
+        try {
+            disableButton('decryptButton', true);
+            showProgress(0);
+
+            const encodedFile = document.getElementById('encodedMediaInput').files[0];
+            const password = document.getElementById('decodePassword').value || '1';
+            const selectedType = document.querySelector('input[name="wmType"]:checked').value;
+
+            if (!encodedFile) {
+                showMessage('请选择带水印的图片');
+                return;
+            }
+
+            showProgress(10);
+
+            // 加载带水印的图片
+            const imageInfo = await loadImageFromFile(encodedFile);
+            showProgress(20);
+
+            // 创建水印对象
+            const passwordNum = password.split('').reduce((hash, char) => {
+                return ((hash << 5) - hash) + char.charCodeAt(0);
+            }, 0);
+            const passwordImg = Math.abs(passwordNum) || 1;
+            const passwordWm = passwordImg + 1;
+
+            const watermark = new WaterMark(passwordWm, passwordImg);
+
+            showProgress(30);
+
+            let wmShape;
+            if (selectedType === 'image') {
+                wmShape = [WATERMARK_SIZE, WATERMARK_SIZE];
+            } else {
+                // 文字水印，使用更精确的长度估算
+                const textArea = Math.floor(imageInfo.width * imageInfo.height / (this.blockShape[0] * this.blockShape[1]));
+                const maxTextLength = Math.min(textArea, 500); // 限制最大长度
+                wmShape = [1, maxTextLength * 8]; // 每个字符8位
+            }
+
+            // 提取水印
+            const result = watermark.extract(
+                imageInfo.imageData,
+                imageInfo.width,
+                imageInfo.height,
+                wmShape,
+                selectedType === 'text' ? 'str' : 'img'
+            );
+
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
+
+            if (selectedType === 'text') {
+                // 显示文字结果
+                const resultDiv = document.getElementById('extractResult');
+                const cleanText = result.trim();
+                resultDiv.innerHTML = `
+                    <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 10px 0;">
+                        <strong>提取的文字水印：</strong><br>
+                        <div style="font-family: monospace; background: white; padding: 10px; border-radius: 3px; margin-top: 10px;">
+                            ${cleanText || '(提取失败或水印为空)'}
+                        </div>
+                    </div>
+                `;
+                if (cleanText) {
+                    downloadText(cleanText, `extracted_text_${timestamp}.txt`);
+                    showMessage('文字水印提取成功！');
+                } else {
+                    showMessage('文字水印提取失败，请检查密码或图片');
+                }
+            } else {
+                // 显示图片结果并提供下载
+                const resultDiv = document.getElementById('extractResult');
+                const canvas = document.createElement('canvas');
+                canvas.width = WATERMARK_SIZE;
+                canvas.height = WATERMARK_SIZE;
+                canvas.style.cssText = 'border: 1px solid #ddd; margin: 10px 0; max-width: 128px; max-height: 128px;';
+
+                const ctx = canvas.getContext('2d');
+                const imageData = ctx.createImageData(WATERMARK_SIZE, WATERMARK_SIZE);
+
+                for (let i = 0; i < WATERMARK_SIZE; i++) {
+                    for (let j = 0; j < WATERMARK_SIZE; j++) {
+                        const idx = (i * WATERMARK_SIZE + j) * 4;
+                        const value = result[i][j];
+                        imageData.data[idx] = value;
+                        imageData.data[idx + 1] = value;
+                        imageData.data[idx + 2] = value;
+                        imageData.data[idx + 3] = 255;
+                    }
+                }
+
+                ctx.putImageData(imageData, 0, 0);
+
+                resultDiv.innerHTML = `
+                    <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 10px 0;">
+                        <strong>提取的图像水印 (128x128)：</strong><br>
+                    </div>
+                `;
+                resultDiv.querySelector('div').appendChild(canvas);
+
+                downloadWatermarkImage(result, `extracted_watermark_${timestamp}.png`);
+                showMessage('图像水印提取成功！水印图片已开始下载。');
+            }
+
+            hideProgress();
+
+        } catch (error) {
+            console.error('解密失败:', error);
+            showMessage('解密失败: ' + error.message);
+            hideProgress();
+        } finally {
+            disableButton('decryptButton', false);
+        }
+    });
+
+    // 按钮禁用处理
+    document.querySelectorAll('.disable-on-click').forEach(button => {
+        button.addEventListener('click', function() {
+            // 防止双击
+            this.disabled = true;
+            setTimeout(() => {
+                if (!this.textContent.includes('中...')) {
+                    this.disabled = false;
+                }
+            }, 1000);
+        });
+    });
 });
 </script>

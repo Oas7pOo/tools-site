@@ -1,0 +1,172 @@
+---
+layout: default
+title: 文本转图片 - 冰兔的工具站
+header_title: 文本转图片
+header_description: 上传txt文本文件生成png图片，以及将png图片转为txt文件下载。
+---
+
+<h2>文本转图片加密工具</h2>
+<p>上传txt文本文件生成png图片，以及将png图片转为txt文件下载。</p>
+<p>让我看看你的文是什么颜色.jpg</p>
+
+<div class="container">
+    <label>上传txt文本文件：</label>
+    <input type="file" id="fileInput" accept=".txt">
+
+    <button onclick="encodeFile()" class="disable-on-click" >生成像素图</button>
+</div>
+
+<hr>
+
+<h2>图片转文本解密工具</h2>
+<div class="container">
+    <label>上传png图片文件：</label>
+    <input type="file" id="imageInput" accept=".png">
+
+    <button onclick="decodeImage()" class="disable-on-click" >解析像素图</button>
+</div>
+
+<!-- 进度条结构 -->
+<div id="progressBar"><div></div></div>
+
+<script>
+    const END_MARK = "*~@Fr~*";
+
+    function updateProgress(percent) {
+        const bar = document.querySelector('#progressBar > div');
+        if (bar) bar.style.width = `${Math.round(percent * 100)}%`;
+    }
+
+    // 读取文本文件并在末尾添加结束标记 END_MARK，然后存成 PNG
+    async function encodeFile() {
+        const fileInput = document.getElementById('fileInput');
+        if (!fileInput.files.length) {
+            return alert('请选择文本文件');
+        }
+
+        try {
+            const file = fileInput.files[0];
+            // 提取不带后缀的文件名，用于生成 PNG 名
+            const originalName = file.name.replace(/\.[^/.]+$/, "");
+
+            // 用 file.stream() 读入字节
+            const reader = file.stream().getReader();
+
+            let chunks = [];
+            let totalSize = 0;
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                chunks.push(value);
+                totalSize += value.length;
+            }
+            const rawData = new Uint8Array(totalSize);
+            let offset = 0;
+            for (const chunk of chunks) {
+                rawData.set(chunk, offset);
+                offset += chunk.length;
+            }
+
+            // 追加结束标记
+            const markBytes = new TextEncoder().encode(END_MARK);
+            const finalData = new Uint8Array(rawData.length + markBytes.length);
+            finalData.set(rawData);
+            finalData.set(markBytes, rawData.length);
+
+            // 补足到3的倍数
+            const padding = (3 - (finalData.length % 3)) % 3;
+            const paddedData = new Uint8Array(finalData.length + padding);
+            paddedData.set(finalData);
+
+            // 写入 Canvas
+            const bytesPerPixel = 3;
+            const pixelCount = paddedData.length / bytesPerPixel;
+            const size = Math.ceil(Math.sqrt(pixelCount));
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+
+            const imageData = ctx.createImageData(size, size);
+            for (let i = 0; i < paddedData.length; i++) {
+                const pixelIndex = Math.floor(i / bytesPerPixel);
+                const channel = i % bytesPerPixel;
+                imageData.data[pixelIndex * 4 + channel] = paddedData[i];
+            }
+            // Alpha = 255
+            for (let i = 3; i < imageData.data.length; i += 4) {
+                imageData.data[i] = 255;
+            }
+            ctx.putImageData(imageData, 0, 0);
+
+            // 导出 PNG 名称包含原名称
+            canvas.toBlob(blob => {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                // 例如: 原文件名为 note.txt => note_像素图_时间戳.png
+                a.download = `${originalName}_像素图_${Date.now()}.png`;
+                a.click();
+                URL.revokeObjectURL(url);
+            }, 'image/png', 1.0);
+
+        } catch (error) {
+            alert(`生成失败: ${error.message}`);
+        }
+    }
+
+    // 读取 PNG ，提取 RGB -> 转为文本 -> 搜索 END_MARK 截断 -> 下载
+    async function decodeImage() {
+        const fileInput = document.getElementById('imageInput');
+        if (!fileInput.files.length) {
+            return alert('请选择图片文件');
+        }
+
+        try {
+            const file = fileInput.files[0];
+            // 提取不带后缀的图片名，用于生成解码后的 TXT 名
+            const originalName = file.name.replace(/\.[^/.]+$/, "");
+
+            // 加载到 <img>
+            const img = await createImageBitmap(file);
+
+            // 将图片绘制到 Canvas，获取像素数据
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+
+            const imageData = ctx.getImageData(0, 0, img.width, img.height);
+            const totalPixels = img.width * img.height;
+            const rawData = new Uint8Array(totalPixels * 3);
+
+            let byteCount = 0;
+            for (let i = 0; i < imageData.data.length; i += 4) {
+                rawData[byteCount++] = imageData.data[i];     // R
+                rawData[byteCount++] = imageData.data[i + 1]; // G
+                rawData[byteCount++] = imageData.data[i + 2]; // B
+            }
+
+            // 转成字符串，搜索结束标记
+            const fullString = new TextDecoder().decode(rawData);
+            const endPos = fullString.indexOf(END_MARK);
+            if (endPos === -1) {
+                return alert('未找到结束标记，数据可能损坏或未按本工具生成');
+            }
+            const extractedText = fullString.slice(0, endPos);
+
+            // 下载解码后的文本，文件名包含上传的 PNG 名
+            const blob = new Blob([extractedText], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.download = `${originalName}_解码_${Date.now()}.txt`;
+            a.href = url;
+            a.click();
+            URL.revokeObjectURL(url);
+
+        } catch (error) {
+            alert(`解析失败: ${error.message}`);
+        }
+    }
+</script>

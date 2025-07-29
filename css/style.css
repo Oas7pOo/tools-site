@@ -126,7 +126,6 @@ a.active {
   border-radius: 8px;
 }
 
-
 label {
   display: block;
   margin: 10px 0 5px;
@@ -142,7 +141,6 @@ input[type="file"] {
 
 button {
   display: block;
-  width: 100%;
   padding: 12px;
   margin-top: 15px;
   background: #007bff;
@@ -153,11 +151,15 @@ button {
   transition: background 0.3s;
 }
 
-or_button {
-}
-
 button:hover {
   background: #0056b3;
+}
+
+/* 禁用状态时的样式 */
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: #ccc !important; /* 可选：改变背景色 */
 }
 
 /* 正文多栏容器（仅针对正文内容） */
@@ -226,6 +228,25 @@ footer {
   transition: width 0.4s ease;
 }
 
+/* 主样式：让按钮固定在左上角 */
+.hamburger-btn {
+  position: fixed;
+  top: 15px;
+  left: 15px;
+  z-index: 9999;
+
+  font-size: 24px;
+  background: #333;
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: 4px;
+
+  /* 如需默认隐藏，仅在小屏时显示，可用： */
+  /* display: none; */
+}
+
 /* 响应式调整：屏幕宽度较小时，导航栏显示在顶部 */
 @media (max-width: 768px) {
   .wrapper {
@@ -265,5 +286,6 @@ footer {
     cursor: pointer;
     padding: 8px 12px;
     border-radius: 4px;
+    display: block;  /* 小屏显示按钮 */
   }
 }

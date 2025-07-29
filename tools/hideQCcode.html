@@ -1,11 +1,14 @@
 ---
 layout: default
-title: 幻影坦克 - 冰兔的工具站
-header_title: 幻影坦克
-header_description: 上传上层图片和下层图片，生成伪装后的文件。
+title: 图片隐藏二维码 - 冰兔的工具站
+header_title: 图片隐藏二维码
+header_description: 上传图片和二维码图片，生成伪装后的文件。
 ---
 
-<h2>幻影坦克图像合成工具</h2>
+<h2>图片隐藏二维码合成工具</h2>
+<p>程序会将图片与二维码结合，生成带有透明度的png图片</p>
+<p>隐藏二维码的图片可以使用彩色图片，二维码推荐纯黑白二维码</p>
+
 
 <div class="container">
     <label>上传上层图片（正常展示层）：</label>
@@ -16,8 +19,8 @@ header_description: 上传上层图片和下层图片，生成伪装后的文件
     <input type="file" id="hiddenImageInput" accept="image/*">
 
     <br>
-    <button id="combineButton">生成并下载</button>
-    <canvas id="canvas" style="display:none;"></canvas>
+    <button id="combineButton" class="disable-on-click" >生成并下载</button>
+    <canvas id="canvas"></canvas>
 </div>
 
 <script>
