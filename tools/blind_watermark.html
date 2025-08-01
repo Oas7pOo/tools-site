@@ -545,23 +545,71 @@ class WaterMark {
         return {imgData, width, height};
     }
 
+    // 计算简单校验和
+    calculateChecksum(text) {
+        let checksum = 0;
+        for (let i = 0; i < text.length; i++) {
+            checksum = (checksum + text.charCodeAt(i)) % 256;
+        }
+        return checksum;
+    }
+
+    // 创建文字水印段（文字+分隔符+校验值）
+    createTextSegment(text) {
+        const checksum = this.calculateChecksum(text);
+        return text + '|' + checksum.toString(16).padStart(2, '0') + '|';
+    }
+
+    // 验证文字段
+    validateTextSegment(segment) {
+        const parts = segment.split('|');
+        if (parts.length >= 2) {
+            const text = parts[0];
+            const checksumHex = parts[1];
+            if (checksumHex.length === 2) {
+                const expectedChecksum = this.calculateChecksum(text);
+                const actualChecksum = parseInt(checksumHex, 16);
+                if (expectedChecksum === actualChecksum) {
+                    return text;
+                }
+            }
+        }
+        return null;
+    }
+
     readWm(wmContent, mode = 'img') {
         if (mode === 'str') {
-            // 文字直接转二进制
+            // 文字水印：创建重复填充的固定长度水印
+            const segment = this.createTextSegment(wmContent);
+            const targetLength = WATERMARK_SIZE * WATERMARK_SIZE / 8; // 与图像水印相同的字节数
+
+            // 重复填充到目标长度
+            let repeatedText = '';
+            while (repeatedText.length < targetLength) {
+                repeatedText += segment;
+            }
+            repeatedText = repeatedText.substring(0, targetLength);
+
+            // 转换为二进制
             const encoder = new TextEncoder();
-            const bytes = encoder.encode(wmContent);
+            const bytes = encoder.encode(repeatedText);
             const bits = [];
             for (let byte of bytes) {
                 for (let i = 7; i >= 0; i--) {
                     bits.push((byte >> i) & 1);
                 }
             }
-            this.originalWmBit = [...bits]; // 保存原始
+
+            console.log('文字水印段:', segment);
+            console.log('重复后长度:', repeatedText.length, '字节');
+            console.log('二进制位数:', bits.length);
+
+            this.originalWmBit = [...bits];
             this.wmBit = bits;
         } else if (mode === 'img') {
             // 图片转二进制（128x128）
             const bits = wmContent.map(pixel => pixel > 128 ? 1 : 0);
-            this.originalWmBit = [...bits]; // 保存原始
+            this.originalWmBit = [...bits];
             this.wmBit = bits;
         } else {
             this.originalWmBit = [...wmContent];
@@ -596,9 +644,14 @@ class WaterMark {
     }
 
     extract(imgData, width, height, wmShape, mode = 'img') {
-        this.wmSize = wmShape[0] * wmShape[1];
+        if (mode === 'str') {
+            // 文字水印使用固定长度
+            this.wmSize = WATERMARK_SIZE * WATERMARK_SIZE;
+        } else {
+            this.wmSize = wmShape[0] * wmShape[1];
+        }
 
-        let wmAvg = this.bwmCore.extract(imgData, width, height, wmShape);
+        let wmAvg = this.bwmCore.extract(imgData, width, height, [WATERMARK_SIZE, WATERMARK_SIZE]);
 
         // 解密
         const wm = this.extractDecrypt(wmAvg);
@@ -621,27 +674,81 @@ class WaterMark {
             }
             return result;
         } else if (mode === 'str') {
-            // 二进制转文字，健壮处理bits长度
-            const bitsArr = wm.map(x => x > threshold ? '1' : '0');
-            let text = '';
-            for (let i = 0; i + 7 < bitsArr.length; i += 8) {
-                const byteStr = bitsArr.slice(i, i + 8).join('');
-                const charCode = parseInt(byteStr, 2);
-                if (charCode === 0) break; // 0x00字符停止
-                if (isNaN(charCode) || charCode < 0 || charCode > 255) continue; // 跳过异常
-                text += String.fromCharCode(charCode);
+            // 文字水印解析 - 固定长度解析
+            const bits = wm.map(x => x > threshold ? '1' : '0').join('');
+            let fullText = '';
+
+            // 转换所有位为文字
+            for (let i = 0; i < bits.length; i += 8) {
+                const byte = bits.substr(i, 8);
+                if (byte.length === 8) {
+                    const charCode = parseInt(byte, 2);
+                    if (charCode > 0 && charCode < 256) {
+                        fullText += String.fromCharCode(charCode);
+                    }
+                }
             }
-            return text.replace(/\0/g, '').trim(); // 去除尾部0和空白
+
+            console.log('解析的完整文字长度:', fullText.length);
+            console.log('解析的完整文字前100字符:', fullText.substring(0, 100));
+
+            // 查找所有可能的文字段
+            const segments = this.extractTextSegments(fullText);
+            console.log('找到的有效段数:', segments.length);
+
+            if (segments.length > 0) {
+                // 返回出现频率最高的文字
+                const frequency = {};
+                segments.forEach(seg => {
+                    frequency[seg] = (frequency[seg] || 0) + 1;
+                });
+
+                const sortedSegments = Object.entries(frequency).sort((a, b) => b[1] - a[1]);
+                console.log('文字频率统计:', sortedSegments);
+
+                return sortedSegments[0][0]; // 返回频率最高的文字
+            }
+
+            return ''; // 没有找到有效文字
         }
 
         return wm;
     }
 
-    // 简单有效的阈值计算
+    // 提取所有有效的文字段
+    extractTextSegments(fullText) {
+        const validSegments = [];
+        const maxSegmentLength = 200; // 限制段的最大长度
+
+        // 查找所有可能的分隔符位置
+        for (let start = 0; start < fullText.length - 5; start++) {
+            for (let end = start + 5; end < Math.min(start + maxSegmentLength, fullText.length); end++) {
+                const candidate = fullText.substring(start, end);
+
+                // 检查是否包含分隔符模式
+                if (candidate.includes('|') && candidate.split('|').length >= 2) {
+                    const validated = this.validateTextSegment(candidate);
+                    if (validated) {
+                        validSegments.push(validated);
+                        console.log('找到有效段:', validated);
+                    }
+                }
+            }
+        }
+
+        return validSegments;
+    }
+
+    // 简单有效的阈值计算 - 针对文字优化
     calculateThreshold(data) {
-        // 使用均值作为阈值
-        const mean = data.reduce((sum, val) => sum + val, 0) / data.length;
-        return mean;
+        // 对于文字水印，使用更保守的阈值
+        const sorted = [...data].sort((a, b) => a - b);
+        const q1 = sorted[Math.floor(sorted.length * 0.25)];
+        const q3 = sorted[Math.floor(sorted.length * 0.75)];
+        const median = sorted[Math.floor(sorted.length * 0.5)];
+
+        // 使用四分位数间的中位数作为阈值，更稳定
+        return (q1 + q3) / 2;
     }
 }
 
@@ -716,7 +823,21 @@ function showWatermarkPreview(data, isText = false) {
     if (isText) {
         const textDiv = document.createElement('div');
         textDiv.style.cssText = 'background: #f5f5f5; padding: 10px; border-radius: 5px; margin: 10px 0; font-family: monospace;';
-        textDiv.textContent = `文字水印预览: "${data}" (${data.length * 8} bits)`;
+
+        // 计算重复填充后的信息
+        const targetBytes = WATERMARK_SIZE * WATERMARK_SIZE / 8;
+        const segmentLength = data.length + 5; // 文字 + |xx|
+        const repeatCount = Math.floor(targetBytes / segmentLength);
+
+        textDiv.innerHTML = `
+            <strong>文字水印预览:</strong><br>
+            原文: "${data}"<br>
+            <small style="color: #666;">
+            段长度: ${segmentLength} 字节<br>
+            重复次数: ~${repeatCount} 次<br>
+            总长度: ${targetBytes} 字节 (${targetBytes * 8} bits)
+            </small>
+        `;
         previewDiv.appendChild(textDiv);
         return;
     }
@@ -893,12 +1014,14 @@ document.addEventListener('DOMContentLoaded', function() {
             watermark.readImg(imageInfo.imageData, imageInfo.width, imageInfo.height);
             showProgress(30);
 
-            // 读取水印
             if (watermarkImageFile) {
                 const wmInfo = await loadWatermarkImage(watermarkImageFile);
                 watermark.readWm(wmInfo.data, 'img');
+                console.log('图像水印长度:', wmInfo.data.length);
             } else {
                 watermark.readWm(watermarkText, 'str');
+                console.log('文字水印原文:', watermarkText);
+                console.log('文字段长度:', watermarkText.length + 5, '字节');
             }
 
             showProgress(40);
@@ -954,15 +1077,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
             showProgress(30);
 
-            let wmShape;
-            if (selectedType === 'image') {
-                wmShape = [WATERMARK_SIZE, WATERMARK_SIZE];
-            } else {
-                // 文字水印，使用更精确的长度估算
-                const textArea = Math.floor(imageInfo.width * imageInfo.height / (this.blockShape[0] * this.blockShape[1]));
-                const maxTextLength = Math.min(textArea, 500); // 限制最大长度
-                wmShape = [1, maxTextLength * 8]; // 每个字符8位
-            }
+            // 文字和图像水印都使用相同的固定尺寸
+            let wmShape = [WATERMARK_SIZE, WATERMARK_SIZE];
+
+            console.log('提取参数:', {
+                imageSize: `${imageInfo.width}x${imageInfo.height}`,
+                wmShape: wmShape,
+                type: selectedType
+            });
 
             // 提取水印
             const result = watermark.extract(
@@ -979,19 +1101,24 @@ document.addEventListener('DOMContentLoaded', function() {
                 // 显示文字结果
                 const resultDiv = document.getElementById('extractResult');
                 const cleanText = result.trim();
+                console.log('最终提取结果:', cleanText);
+
                 resultDiv.innerHTML = `
                     <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 10px 0;">
                         <strong>提取的文字水印：</strong><br>
-                        <div style="font-family: monospace; background: white; padding: 10px; border-radius: 3px; margin-top: 10px;">
+                        <div style="font-family: monospace; background: white; padding: 10px; border-radius: 3px; margin-top: 10px; min-height: 30px;">
                             ${cleanText || '(提取失败或水印为空)'}
                         </div>
+                        <small style="color: #666; margin-top: 10px; display: block;">
+                            提取状态: ${cleanText ? '成功' : '失败'} | 字符数: ${cleanText.length}
+                        </small>
                     </div>
                 `;
-                if (cleanText) {
+                if (cleanText && cleanText.length > 0) {
                     downloadText(cleanText, `extracted_text_${timestamp}.txt`);
                     showMessage('文字水印提取成功！');
                 } else {
-                    showMessage('文字水印提取失败，请检查密码或图片');
+                    showMessage('文字水印提取失败，请检查密码是否正确，或图片是否包含文字水印');
                 }
             } else {
                 // 显示图片结果并提供下载
