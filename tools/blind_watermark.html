@@ -1,7 +1,7 @@
 ---
 layout: default
-title: 盲水印Claude - 冰兔的工具站
-header_title: Claude盲水印工具
+title: 盲水印 - 冰兔的工具站
+header_title: 盲水印工具
 header_description: 采用改进的数字水印算法，提供更可靠的图像水印嵌入与提取功能
 ---
 
@@ -13,7 +13,7 @@ header_description: 采用改进的数字水印算法，提供更可靠的图像
     <label>上传图片（JPG/PNG/WebP等）：</label>
     <input type="file" id="mediaInput" accept="image/*">
     <br>
-    <label>上传水印图片（自动转换为128x128黑白）：</label>
+    <label>上传水印图片（自动转换为64x64黑白）：</label>
     <input type="file" id="watermarkImageInput" accept="image/*">
     <label>或输入水印文字：</label>
     <textarea id="watermarkText" placeholder="输入水印文本，将被嵌入到图像中"></textarea>
@@ -27,7 +27,7 @@ header_description: 采用改进的数字水印算法，提供更可靠的图像
 
 <hr>
 
-<h2>Claude盲水印解密工具</h2>
+<h2>盲水印解密工具</h2>
 <div class="container">
     <label>上传带水印的图片（PNG/JPG/WebP等）：</label>
     <input type="file" id="encodedMediaInput" accept="image/*">
@@ -38,7 +38,7 @@ header_description: 采用改进的数字水印算法，提供更可靠的图像
         <input type="radio" id="textWatermark" name="wmType" value="text" checked>
         <label for="textWatermark" style="display:inline">文字水印</label>
         <input type="radio" id="imageWatermark" name="wmType" value="image">
-        <label for="imageWatermark" style="display:inline">图像水印（128x128）</label>
+        <label for="imageWatermark" style="display:inline">图像水印（64x64）</label>
     </div>
     </div>
     <label>输入密码（加密时设置的密码）：</label>
@@ -51,60 +51,68 @@ header_description: 采用改进的数字水印算法，提供更可靠的图像
 <div id="progressBar"><div></div></div>
 
 <script>
-    // 工具类定义
+(function () {
+    'use strict';
+
     class ClaudeBlindWatermark {
         constructor() {
-            this.WATERMARK_SIZE = 128;
-            this.BLOCK_SIZE = 8;
-            this.Q_FACTOR = 32; // 量化因子，减小以减少信息损失
-            this.ALPHA = 0.2;  // 嵌入强度，增大以增强水印效果
+            this.WATERMARK_SIZE = 64;   // 64x64 = 4096 bits
+            this.BLOCK_SIZE = 8;        // 8x8 DCT block
+            this.Q_FACTOR = 32;         // 量化因子
+            this.ALPHA = 0.2;           // 嵌入强度
+            this.MAGIC = 0xA55A;        // 16 bit 魔数
         }
-        
-        // 辅助函数：生成基于密码的种子
+
+        // ===== 工具函数：密码 -> 种子 / PRNG =====
         generateSeed(password) {
-            if (!password) return 123456789; // 默认种子
-            
+            if (password == null) return 123456789;
+            let normalized = String(password);
+            try {
+                normalized = normalized.normalize('NFKC');
+            } catch (e) {}
+            normalized = normalized.trim();
+            if (!normalized) return 123456789;
+
             let hash = 0;
-            for (let i = 0; i < password.length; i++) {
-                const char = password.charCodeAt(i);
+            for (let i = 0; i < normalized.length; i++) {
+                const char = normalized.charCodeAt(i);
                 hash = ((hash << 5) - hash) + char;
-                hash = hash & hash; // 转换为32位整数
+                hash |= 0;
             }
+            if (hash === 0) hash = 123456789;
             return Math.abs(hash);
         }
-        
-        // 辅助函数：基于种子的伪随机数生成器
+
         createPRNG(seed) {
             let state = seed % 2147483647;
             if (state <= 0) state += 2147483646;
-            
+
             return {
-                next: function() {
+                next: function () {
                     state = Math.imul(state, 16807) % 2147483647;
                     return (state - 1) / 2147483646;
                 },
-                
-                // Fisher-Yates 洗牌算法
-                shuffle: function(array) {
-                    const result = [...array];
+                shuffle: function (array) {
+                    const result = array.slice();
                     for (let i = result.length - 1; i > 0; i--) {
                         const j = Math.floor(this.next() * (i + 1));
-                        [result[i], result[j]] = [result[j], result[i]];
+                        const tmp = result[i];
+                        result[i] = result[j];
+                        result[j] = tmp;
                     }
                     return result;
                 }
             };
         }
-        
-        // RGB转YUV颜色空间
+
+        // ===== 颜色空间转换 =====
         rgbToYuv(r, g, b) {
             const y = 0.299 * r + 0.587 * g + 0.114 * b;
             const u = -0.14713 * r - 0.28886 * g + 0.436 * b + 128;
             const v = 0.615 * r - 0.51499 * g - 0.10001 * b + 128;
             return [y, u, v];
         }
-        
-        // YUV转RGB颜色空间
+
         yuvToRgb(y, u, v) {
             const r = y + 1.13983 * (v - 128);
             const g = y - 0.39465 * (u - 128) - 0.58060 * (v - 128);
@@ -115,30 +123,25 @@ header_description: 采用改进的数字水印算法，提供更可靠的图像
                 Math.max(0, Math.min(255, Math.round(b)))
             ];
         }
-        
-        // 一维DCT变换
+
+        // ===== DCT / IDCT =====
         dct1D(data) {
             const n = data.length;
             const result = new Array(n);
-            
             for (let k = 0; k < n; k++) {
                 let sum = 0;
                 for (let i = 0; i < n; i++) {
                     sum += data[i] * Math.cos((Math.PI * k * (2 * i + 1)) / (2 * n));
                 }
-                
                 const scale = k === 0 ? Math.sqrt(1 / n) : Math.sqrt(2 / n);
                 result[k] = scale * sum;
             }
-            
             return result;
         }
-        
-        // 一维IDCT变换
+
         idct1D(data) {
             const n = data.length;
             const result = new Array(n);
-            
             for (let i = 0; i < n; i++) {
                 let sum = 0;
                 for (let k = 0; k < n; k++) {
@@ -147,69 +150,48 @@ header_description: 采用改进的数字水印算法，提供更可靠的图像
                 }
                 result[i] = sum;
             }
-            
             return result;
         }
-        
-        // 二维DCT变换
+
         dct2D(matrix) {
             const n = matrix.length;
             const m = matrix[0].length;
-            const result = Array(n).fill().map(() => Array(m).fill(0));
-            
-            // 行DCT
+            const result = new Array(n);
             for (let i = 0; i < n; i++) {
                 result[i] = this.dct1D(matrix[i]);
             }
-            
-            // 列DCT
             for (let j = 0; j < m; j++) {
-                const column = [];
-                for (let i = 0; i < n; i++) {
-                    column.push(result[i][j]);
-                }
-                const transformedColumn = this.dct1D(column);
-                for (let i = 0; i < n; i++) {
-                    result[i][j] = transformedColumn[i];
-                }
+                const column = new Array(n);
+                for (let i = 0; i < n; i++) column[i] = result[i][j];
+                const transCol = this.dct1D(column);
+                for (let i = 0; i < n; i++) result[i][j] = transCol[i];
             }
-            
             return result;
         }
-        
-        // 二维IDCT变换
+
         idct2D(matrix) {
             const n = matrix.length;
             const m = matrix[0].length;
-            const result = Array(n).fill().map(() => Array(m).fill(0));
-            
-            // 行IDCT
+            const result = new Array(n);
             for (let i = 0; i < n; i++) {
                 result[i] = this.idct1D(matrix[i]);
             }
-            
-            // 列IDCT
             for (let j = 0; j < m; j++) {
-                const column = [];
-                for (let i = 0; i < n; i++) {
-                    column.push(result[i][j]);
-                }
-                const transformedColumn = this.idct1D(column);
-                for (let i = 0; i < n; i++) {
-                    result[i][j] = transformedColumn[i];
-                }
+                const column = new Array(n);
+                for (let i = 0; i < n; i++) column[i] = result[i][j];
+                const transCol = this.idct1D(column);
+                for (let i = 0; i < n; i++) result[i][j] = transCol[i];
             }
-            
             return result;
         }
-        
-        // 加载图像并获取像素数据
+
+        // ===== 图像加载 & 水印图片准备 =====
         async loadImage(file) {
             return new Promise((resolve, reject) => {
                 const reader = new FileReader();
-                reader.onload = (e) => {
+                reader.onload = function (e) {
                     const img = new Image();
-                    img.onload = () => {
+                    img.onload = function () {
                         const canvas = document.createElement('canvas');
                         const ctx = canvas.getContext('2d');
                         canvas.width = img.width;
@@ -229,8 +211,7 @@ header_description: 采用改进的数字水印算法，提供更可靠的图像
                 reader.readAsDataURL(file);
             });
         }
-        
-        // 准备水印图片（转换为128x128黑白）
+
         async prepareWatermarkImage(file) {
             return new Promise((resolve, reject) => {
                 const reader = new FileReader();
@@ -241,18 +222,15 @@ header_description: 采用改进的数字水印算法，提供更可靠的图像
                         const ctx = canvas.getContext('2d');
                         canvas.width = this.WATERMARK_SIZE;
                         canvas.height = this.WATERMARK_SIZE;
-                        
-                        // 绘制并缩放图像
                         ctx.drawImage(img, 0, 0, this.WATERMARK_SIZE, this.WATERMARK_SIZE);
                         const imageData = ctx.getImageData(0, 0, this.WATERMARK_SIZE, this.WATERMARK_SIZE);
-                        
-                        // 转换为二值图像
                         const binaryData = [];
                         for (let i = 0; i < imageData.data.length; i += 4) {
-                            const gray = 0.299 * imageData.data[i] + 0.587 * imageData.data[i + 1] + 0.114 * imageData.data[i + 2];
+                            const gray = 0.299 * imageData.data[i] +
+                                0.587 * imageData.data[i + 1] +
+                                0.114 * imageData.data[i + 2];
                             binaryData.push(gray > 128 ? 1 : 0);
                         }
-                        
                         resolve({
                             data: binaryData,
                             width: this.WATERMARK_SIZE,
@@ -266,775 +244,807 @@ header_description: 采用改进的数字水印算法，提供更可靠的图像
                 reader.readAsDataURL(file);
             });
         }
-        
-        // 将文字转换为二进制水印数据
+
+        // ===== 文字 <-> bit 流（带魔数 + 长度 + 校验） =====
         textToWatermarkData(text) {
-            console.log('=== 文字转换为水印数据调试信息 ===');
-            console.log('输入文本:', text);
-            
+            const totalBits  = this.WATERMARK_SIZE * this.WATERMARK_SIZE; // 4096
+            const headerBits = 16 + 16 + 16; // magic + length + checksum
+
             const encoder = new TextEncoder();
             const textBytes = encoder.encode(text);
-            
-            console.log('文本字节长度:', textBytes.length);
-            console.log('文本字节数组:', textBytes);
-            
-            // 计算需要填充的字节数
-            const totalBits = this.WATERMARK_SIZE * this.WATERMARK_SIZE;
-            const textBits = textBytes.length * 8;
-            const paddingBits = totalBits - (textBits + 32); // 32位用于存储原始文本长度
-            
-            console.log('总水印位数:', totalBits);
-            console.log('文本数据位数:', textBits);
-            console.log('填充位数:', paddingBits);
-            
-            // 创建位流
+            const maxBytes  = Math.floor((totalBits - headerBits) / 8);
+            const length    = Math.min(textBytes.length, maxBytes);
+
+            let checksum = 0;
+            for (let i = 0; i < length; i++) {
+                checksum = (checksum + textBytes[i]) & 0xFFFF;
+            }
+
             const bits = [];
-            
-            // 先添加文本长度（32位）
-            // 存储字节长度而不是字符长度，确保编码和解码一致
-            console.log('存储前32位作为文本长度:', textBytes.length);
-            for (let i = 31; i >= 0; i--) {
-                const bit = (textBytes.length >> i) & 1;
-                bits.push(bit);
-                if (i % 8 === 0) {
-                    console.log(`  位${31-i}~${31-i+7}: ${bits.slice(-8).join('')}`);
+            const pushBits = (value, bitCount) => {
+                for (let i = bitCount - 1; i >= 0; i--) {
+                    bits.push((value >> i) & 1);
                 }
+            };
+
+            // 头部：MAGIC + length + checksum
+            pushBits(this.MAGIC & 0xFFFF, 16);
+            pushBits(length & 0xFFFF, 16);
+            pushBits(checksum & 0xFFFF, 16);
+
+            // 正文
+            for (let i = 0; i < length; i++) {
+                pushBits(textBytes[i], 8);
             }
-            
-            // 添加文本数据
-            console.log('存储文本数据位:');
-            for (let i = 0; i < textBytes.length; i++) {
-                const byte = textBytes[i];
-                const byteBits = [];
-                for (let j = 7; j >= 0; j--) {
-                    const bit = (byte >> j) & 1;
-                    bits.push(bit);
-                    byteBits.push(bit);
-                }
-                console.log(`  字节${i}: ${byte.toString(16).padStart(2, '0')} -> ${byteBits.join('')}`);
-            }
-            
-            // 填充剩余位
-            for (let i = 0; i < paddingBits; i++) {
-                bits.push(0);
-            }
-            
+
+            // 填充到固定长度
+            while (bits.length < totalBits) bits.push(0);
+            if (bits.length > totalBits) bits.length = totalBits;
+
             return bits;
         }
-        
-        // 从二进制数据还原文字
-        watermarkDataToText(bits) {
-            console.log('=== 水印文字提取调试信息 ===');
-            console.log('总位数:', bits.length);
-            
-            // 提取文本长度（前32位）
-            let textLength = 0;
-            console.log('提取前32位作为文本长度:');
-            // 注意：这里需要从最高位到最低位读取，与textToWatermarkData函数中的存储方式保持一致
-            for (let i = 0; i < 32; i++) {
-                // 确保有足够的位数据，不足则用0填充
-                if (i < bits.length) {
-                    const bitValue = bits[i] ? 1 : 0;
-                    // 由于textToWatermarkData是从最高位到最低位存储的，所以这里也需要从最高位到最低位构建
-                    textLength = (textLength << 1) | bitValue;
-                    console.log(`位${i}: ${bitValue}`);
-                } else {
-                    textLength = (textLength << 1);
-                    console.log(`位${i}: 超出范围，填充0`);
+
+        decodeWatermarkText(bits) {
+            const totalBits  = bits.length;
+            const headerBits = 16 + 16 + 16;
+            if (totalBits < headerBits) return { text: "", valid: false };
+
+            const readBits = (start, len) => {
+                let v = 0;
+                for (let i = 0; i < len; i++) {
+                    const bit = bits[start + i] ? 1 : 0;
+                    v = (v << 1) | bit;
                 }
-            }
-            
-            // 处理JavaScript中32位整数的符号问题，确保文本长度为无符号整数
-            textLength = textLength >>> 0; // 转换为无符号整数
-            console.log('计算得到的文本长度(字节):', textLength);
-            
-            // 如果长度不合理，返回空字符串
-            // textLength现在表示字节长度，所以需要适当调整最大值
-            if (textLength <= 0 || textLength > 4000) { // 适当增加字节长度限制
-                console.log('文本长度不合理，解码失败');
-                return ""; // 解码失败
-            }
-            
-            // 提取文本数据
+                return v >>> 0;
+            };
+
+            const magic          = readBits(0, 16);
+            const length         = readBits(16, 16);
+            const checksumStored = readBits(32, 16);
+            if (magic !== (this.MAGIC & 0xFFFF)) return { text: "", valid: false };
+
+            const maxBytes = Math.floor((totalBits - headerBits) / 8);
+            if (length < 0 || length > maxBytes) return { text: "", valid: false };
+
             const bytes = [];
-            const totalBytes = Math.min(textLength, Math.floor((bits.length - 32) / 8));
-            
-            for (let i = 0; i < totalBytes; i++) {
+            for (let i = 0; i < length; i++) {
                 let byte = 0;
-                // 注意：textToWatermarkData函数中是从最高位到最低位存储的
-                // 提取文本数据，直接从最高位到最低位迭代，与存储时的逻辑保持一致
-                for (let j = 7; j >= 0; j--) {
-                    const bitIndex = 32 + i * 8 + (7 - j);
-                    if (bitIndex < bits.length) {
-                        const bitValue = bits[bitIndex] ? 1 : 0;
-                        // 从最高位到最低位构建字节
-                        byte = (byte << 1) | bitValue;
-                        console.log(`  字节${i}位${j}: ${bitValue}`);
-                    } else {
-                        // 不足位用0填充
-                        byte = (byte << 1);
-                        console.log(`  字节${i}位${j}: 超出范围，填充0`);
-                    }
+                for (let j = 0; j < 8; j++) {
+                    const bitIndex = headerBits + i * 8 + j;
+                    const bit = bitIndex < totalBits ? (bits[bitIndex] ? 1 : 0) : 0;
+                    byte = (byte << 1) | bit;
                 }
-                console.log(`  构建的字节${i}: ${byte} (0x${byte.toString(16).padStart(2, '0')}, '${String.fromCharCode(byte)}')`);
                 bytes.push(byte);
             }
-            
-            // 转换为文本
+
+            // 校验和
+            let checksumCalc = 0;
+            for (let i = 0; i < bytes.length; i++) {
+                checksumCalc = (checksumCalc + bytes[i]) & 0xFFFF;
+            }
+            if (checksumCalc !== checksumStored) return { text: "", valid: false };
+
             try {
                 const decoder = new TextDecoder();
-                return decoder.decode(new Uint8Array(bytes));
+                const text = decoder.decode(new Uint8Array(bytes));
+                return { text, valid: true };
             } catch (e) {
-                return "";
+                return { text: "", valid: false };
             }
         }
-        
-        // 嵌入水印
+
+        watermarkDataToText(bits) {
+            const { text, valid } = this.decodeWatermarkText(bits);
+            return valid ? text : "";
+        }
+
+        // ===== 几何变换（仅用于解码） =====
+        applyTransform(imageInfo, transform) {
+            if (transform === 'none') return imageInfo;
+
+            const width  = imageInfo.width;
+            const height = imageInfo.height;
+
+            const srcCanvas = document.createElement('canvas');
+            srcCanvas.width  = width;
+            srcCanvas.height = height;
+            const srcCtx = srcCanvas.getContext('2d');
+            const srcImageData = srcCtx.createImageData(width, height);
+            srcImageData.data.set(imageInfo.data);
+            srcCtx.putImageData(srcImageData, 0, 0);
+
+            const dstCanvas = document.createElement('canvas');
+            dstCanvas.width  = width;
+            dstCanvas.height = height;
+            const dstCtx = dstCanvas.getContext('2d');
+
+            dstCtx.save();
+            switch (transform) {
+                case 'flipH':
+                    dstCtx.translate(width, 0);
+                    dstCtx.scale(-1, 1);
+                    break;
+                case 'flipV':
+                    dstCtx.translate(0, height);
+                    dstCtx.scale(1, -1);
+                    break;
+                case 'flipHV':
+                    dstCtx.translate(width, height);
+                    dstCtx.scale(-1, -1);
+                    break;
+                default:
+                    break;
+            }
+            dstCtx.drawImage(srcCanvas, 0, 0);
+            dstCtx.restore();
+
+            const dstImageData = dstCtx.getImageData(0, 0, dstCanvas.width, dstCanvas.height);
+            return {
+                data: dstImageData.data,
+                width: dstCanvas.width,
+                height: dstCanvas.height
+            };
+        }
+
+        // ===== 嵌入（冗余编码） =====
         async embedWatermark(imageInfo, watermarkBits, password) {
             const seed = this.generateSeed(password);
             const prng = this.createPRNG(seed);
-            
-            const width = imageInfo.width;
+
+            const width  = imageInfo.width;
             const height = imageInfo.height;
-            const data = imageInfo.data;
-            
-            // 创建画布用于处理图像
+            const data   = imageInfo.data;
+
             const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            canvas.width = width;
+            const ctx    = canvas.getContext('2d');
+            canvas.width  = width;
             canvas.height = height;
-            
-            // 创建图像数据
+
             const imgData = ctx.createImageData(width, height);
             imgData.data.set(data);
             ctx.putImageData(imgData, 0, 0);
-            
-            // 获取图像数据的副本进行处理
+
             const imageData = ctx.getImageData(0, 0, width, height);
-            const pixels = imageData.data;
-            
-            // 计算图像可以分成多少个块
-            const numBlocksX = Math.floor(width / this.BLOCK_SIZE);
+            const pixels    = imageData.data;
+
+            const numBlocksX = Math.floor(width  / this.BLOCK_SIZE);
             const numBlocksY = Math.floor(height / this.BLOCK_SIZE);
             const totalBlocks = numBlocksX * numBlocksY;
-            
-            // 创建块索引并打乱顺序
+
+            if (!Number.isFinite(numBlocksX) || !Number.isFinite(numBlocksY) || totalBlocks <= 0) {
+                throw new Error('图片分辨率过小或非法，无法嵌入水印');
+            }
+
+            const fullBits   = this.WATERMARK_SIZE * this.WATERMARK_SIZE; // 4096
+            const bitsLen    = watermarkBits && Array.isArray(watermarkBits) ? watermarkBits.length : 0;
+            const bitsToUse  = Math.min(fullBits, bitsLen);
+
+            if (!watermarkBits || bitsLen === 0 || bitsToUse <= 0) {
+                throw new Error('水印数据为空，无法嵌入');
+            }
+
+            let effectiveBits = Math.min(bitsToUse, totalBlocks);
+            if (!Number.isFinite(effectiveBits) || effectiveBits <= 0) {
+                throw new Error('图片块数不足以嵌入任何水印位');
+            }
+
+            let repeats = Math.floor(totalBlocks / effectiveBits);
+            if (!Number.isFinite(repeats) || repeats < 1) repeats = 1;
+
+            let usedBlocks = effectiveBits * repeats;
+            if (!Number.isFinite(usedBlocks) || usedBlocks > totalBlocks) {
+                usedBlocks = totalBlocks; // 强制截断
+            }
+
+            // 构造并打乱块索引
             const blockIndices = [];
             for (let y = 0; y < numBlocksY; y++) {
                 for (let x = 0; x < numBlocksX; x++) {
-                    blockIndices.push({x, y});
+                    blockIndices.push({ x, y });
                 }
             }
             const shuffledIndices = prng.shuffle(blockIndices);
-            
-            // 处理每个块
-            // 确保嵌入和提取时的行为一致，即使水印位数超过总块数
-            for (let i = 0; i < watermarkBits.length; i++) {
-                if (i >= totalBlocks) continue; // 与提取时保持一致，使用continue而不是break
-                
-                const blockIndex = shuffledIndices[i];
-                if (!blockIndex) continue; // 安全检查，防止解构undefined
-                const {x, y} = blockIndex;
-                
-                // 提取块的像素数据
-                const block = [];
-                for (let by = 0; by < this.BLOCK_SIZE; by++) {
-                    const blockRow = [];
-                    for (let bx = 0; bx < this.BLOCK_SIZE; bx++) {
-                        const px = x * this.BLOCK_SIZE + bx;
-                        const py = y * this.BLOCK_SIZE + by;
-                        
-                        if (px < width && py < height) {
-                            const idx = (py * width + px) * 4;
-                            const [r, g, b] = [pixels[idx], pixels[idx+1], pixels[idx+2]];
-                            const [y, u, v] = this.rgbToYuv(r, g, b);
-                            blockRow.push(y); // 只处理亮度通道
-                        } else {
-                            blockRow.push(0);
+
+            console.log('[embedWatermark] totalBlocks =', totalBlocks,
+                        'bitsLen =', bitsLen,
+                        'fullBits =', fullBits,
+                        'bitsToUse =', bitsToUse,
+                        'effectiveBits =', effectiveBits,
+                        'repeats =', repeats,
+                        'usedBlocks =', usedBlocks,
+                        'shuffledLen =', shuffledIndices.length);
+
+            const embedPos      = 3;              // DCT(3,3) 位置
+            const embedStrength = this.Q_FACTOR * this.ALPHA;
+
+            for (let bitIndex = 0; bitIndex < effectiveBits; bitIndex++) {
+                const bit = watermarkBits[bitIndex] ? 1 : 0;
+
+                for (let k = 0; k < repeats; k++) {
+                    const globalIndex = bitIndex * repeats + k;
+
+                    // 边界与合法性检查
+                    if (!Number.isFinite(globalIndex) ||
+                        globalIndex < 0 ||
+                        globalIndex >= usedBlocks ||
+                        globalIndex >= shuffledIndices.length) {
+                        continue;
+                    }
+
+                    const blockInfo = shuffledIndices[globalIndex];
+                    if (!blockInfo || typeof blockInfo.x !== 'number' || typeof blockInfo.y !== 'number') {
+                        console.warn('[embedWatermark] 无效 blockInfo at', globalIndex, blockInfo);
+                        continue;
+                    }
+
+                    const bx0 = blockInfo.x * this.BLOCK_SIZE;
+                    const by0 = blockInfo.y * this.BLOCK_SIZE;
+
+                    // 取出该块亮度 Y
+                    const block = [];
+                    for (let by = 0; by < this.BLOCK_SIZE; by++) {
+                        const row = [];
+                        for (let bx = 0; bx < this.BLOCK_SIZE; bx++) {
+                            const px = bx0 + bx;
+                            const py = by0 + by;
+                            if (px < width && py < height) {
+                                const idx = (py * width + px) * 4;
+                                const r = pixels[idx];
+                                const g = pixels[idx + 1];
+                                const b = pixels[idx + 2];
+                                const [Y] = this.rgbToYuv(r, g, b);
+                                row.push(Y);
+                            } else {
+                                row.push(0);
+                            }
+                        }
+                        block.push(row);
+                    }
+
+                    // DCT
+                    const dctBlock = this.dct2D(block);
+                    if (dctBlock[embedPos] && typeof dctBlock[embedPos][embedPos] === 'number') {
+                        const orig  = dctBlock[embedPos][embedPos];
+                        const quant = Math.round(orig / this.Q_FACTOR) * this.Q_FACTOR;
+                        dctBlock[embedPos][embedPos] = quant + embedStrength * (bit ? 1 : -1);
+                    } else {
+                        continue;
+                    }
+
+                    // IDCT 写回
+                    const idctBlock = this.idct2D(dctBlock);
+                    for (let by = 0; by < this.BLOCK_SIZE; by++) {
+                        for (let bx = 0; bx < this.BLOCK_SIZE; bx++) {
+                            const px = bx0 + bx;
+                            const py = by0 + by;
+                            if (px < width && py < height) {
+                                const idx = (py * width + px) * 4;
+                                const r = pixels[idx];
+                                const g = pixels[idx + 1];
+                                const b = pixels[idx + 2];
+                                const [, U, V] = this.rgbToYuv(r, g, b);
+                                const newY = Math.max(0, Math.min(255, idctBlock[by][bx]));
+                                const [newR, newG, newB] = this.yuvToRgb(newY, U, V);
+                                pixels[idx]     = newR;
+                                pixels[idx + 1] = newG;
+                                pixels[idx + 2] = newB;
+                            }
                         }
                     }
-                    block.push(blockRow);
                 }
-                
-                // 对块进行DCT变换
-                const dctBlock = this.dct2D(block);
-                
-                // 修改AC系数来嵌入水印
-                const bit = watermarkBits[i];
-                const embedPos = 5; // 选择适合嵌入的系数位置
-                
-                if (dctBlock[embedPos] && dctBlock[embedPos][embedPos] !== undefined) {
-                    // 使用量化嵌入
-                    const quantized = Math.round(dctBlock[embedPos][embedPos] / this.Q_FACTOR) * this.Q_FACTOR;
-                    dctBlock[embedPos][embedPos] = quantized + this.Q_FACTOR * this.ALPHA * (bit ? 1 : -1);
-                }
-                
-                // 对块进行IDCT变换
-                const idctBlock = this.idct2D(dctBlock);
-                
-                // 将处理后的块放回图像
-                for (let by = 0; by < this.BLOCK_SIZE; by++) {
-                    for (let bx = 0; bx < this.BLOCK_SIZE; bx++) {
-                        const px = x * this.BLOCK_SIZE + bx;
-                        const py = y * this.BLOCK_SIZE + by;
-                        
-                        if (px < width && py < height) {
-                            const idx = (py * width + px) * 4;
-                            const [r, g, b] = [pixels[idx], pixels[idx+1], pixels[idx+2]];
-                            const [y, u, v] = this.rgbToYuv(r, g, b);
-                            
-                            // 更新亮度值
-                            const newY = Math.max(0, Math.min(255, idctBlock[by][bx]));
-                            const [newR, newG, newB] = this.yuvToRgb(newY, u, v);
-                            
-                            pixels[idx] = newR;
-                            pixels[idx+1] = newG;
-                            pixels[idx+2] = newB;
-                            // alpha通道保持不变
-                        }
-                    }
-                }
-                
-                // 更新进度
-                if (i % 10 === 0) {
-                    this.showProgress(Math.floor((i / watermarkBits.length) * 80));
+
+                if (bitIndex % 50 === 0) {
+                    this.showProgress(Math.floor((bitIndex / effectiveBits) * 80));
                 }
             }
-            
-            // 将处理后的像素数据放回画布
+
             ctx.putImageData(imageData, 0, 0);
-            
-            // 创建Blob并返回
-            return new Promise((resolve) => {
-                canvas.toBlob((blob) => {
-                    resolve(blob);
+
+            return new Promise((resolve, reject) => {
+                if (!canvas.toBlob) {
+                    reject(new Error('当前浏览器不支持 canvas.toBlob'));
+                    return;
+                }
+                canvas.toBlob(blob => {
+                    if (!blob) reject(new Error('生成水印图片失败'));
+                    else resolve(blob);
                 }, 'image/png');
             });
         }
-        
-        // 提取水印
-        async extractWatermark(imageInfo, password, isText = true) {
+
+        // 单次提取（不做几何搜索）：用冗余投票恢复 4096 bit
+        _extractBitsCore(imageInfo, password) {
             const seed = this.generateSeed(password);
             const prng = this.createPRNG(seed);
-            
-            const width = imageInfo.width;
+
+            const width  = imageInfo.width;
             const height = imageInfo.height;
-            const data = imageInfo.data;
-            
-            // 创建画布用于处理图像
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            canvas.width = width;
-            canvas.height = height;
-            
-            // 创建图像数据
-            const imgData = ctx.createImageData(width, height);
-            imgData.data.set(data);
-            ctx.putImageData(imgData, 0, 0);
-            
-            // 获取图像数据
-            const imageData = ctx.getImageData(0, 0, width, height);
-            const pixels = imageData.data;
-            
-            // 计算图像可以分成多少个块
-            const numBlocksX = Math.floor(width / this.BLOCK_SIZE);
+            const pixels = imageInfo.data;
+
+            const numBlocksX = Math.floor(width  / this.BLOCK_SIZE);
             const numBlocksY = Math.floor(height / this.BLOCK_SIZE);
             const totalBlocks = numBlocksX * numBlocksY;
-            
-            // 创建块索引并打乱顺序（与嵌入时相同的方式）
+
+            const fullBits = this.WATERMARK_SIZE * this.WATERMARK_SIZE;
+
+            if (!Number.isFinite(numBlocksX) || !Number.isFinite(numBlocksY) || totalBlocks <= 0) {
+                console.warn('[extractBitsCore] 图片块数为 0，返回全 0');
+                return new Array(fullBits).fill(0);
+            }
+
+            let effectiveBits = Math.min(fullBits, totalBlocks);
+            if (!Number.isFinite(effectiveBits) || effectiveBits <= 0) {
+                console.warn('[extractBitsCore] effectiveBits 非法，返回全 0');
+                return new Array(fullBits).fill(0);
+            }
+
+            let repeats = Math.floor(totalBlocks / effectiveBits);
+            if (!Number.isFinite(repeats) || repeats < 1) repeats = 1;
+
+            let usedBlocks = effectiveBits * repeats;
+            if (!Number.isFinite(usedBlocks) || usedBlocks > totalBlocks) {
+                usedBlocks = totalBlocks;
+            }
+
             const blockIndices = [];
             for (let y = 0; y < numBlocksY; y++) {
                 for (let x = 0; x < numBlocksX; x++) {
-                    blockIndices.push({x, y});
+                    blockIndices.push({ x, y });
                 }
             }
             const shuffledIndices = prng.shuffle(blockIndices);
-            
-            // 水印长度
-            // 文字水印需要确保提取足够的位来包含前32位的文本长度信息
-            const watermarkLength = this.WATERMARK_SIZE * this.WATERMARK_SIZE;
-            
-            console.log('=== 水印提取调试信息 ===');
-            console.log('总水印长度:', watermarkLength);
-            console.log('总块数:', totalBlocks);
-            
-            // 存储提取的水印位
-            const extractedBits = [];
-            
-            // 处理每个块提取水印
-            for (let i = 0; i < watermarkLength; i++) {
-                let bit = 0;
-                
-                // 如果没有足够的块，继续使用默认值0填充，但确保我们至少尝试提取前32位
-                if (i < totalBlocks) {
-                    const blockIndex = shuffledIndices[i];
-                    if (!blockIndex) {
-                        // 安全检查，防止解构undefined
-                        extractedBits.push(0);
-                        if (i < 5 || i > watermarkLength - 5) {
-                            console.log(`块${i}/${watermarkLength}: 无效的块索引，使用默认位值0`);
-                        }
+
+            console.log('[extractBitsCore] totalBlocks =', totalBlocks,
+                        'fullBits =', fullBits,
+                        'effectiveBits =', effectiveBits,
+                        'repeats =', repeats,
+                        'usedBlocks =', usedBlocks,
+                        'shuffledLen =', shuffledIndices.length);
+
+            const votes   = new Array(effectiveBits).fill(0);
+            const embedPos = 3;
+
+            for (let bitIndex = 0; bitIndex < effectiveBits; bitIndex++) {
+                for (let k = 0; k < repeats; k++) {
+                    const globalIndex = bitIndex * repeats + k;
+
+                    if (!Number.isFinite(globalIndex) ||
+                        globalIndex < 0 ||
+                        globalIndex >= usedBlocks ||
+                        globalIndex >= shuffledIndices.length) {
                         continue;
                     }
-                    
-                    const {x, y} = blockIndex;
-                    
-                    // 提取块的像素数据
+
+                    const blockInfo = shuffledIndices[globalIndex];
+                    if (!blockInfo || typeof blockInfo.x !== 'number' || typeof blockInfo.y !== 'number') {
+                        console.warn('[extractBitsCore] 无效 blockInfo at', globalIndex, blockInfo);
+                        continue;
+                    }
+
+                    const bx0 = blockInfo.x * this.BLOCK_SIZE;
+                    const by0 = blockInfo.y * this.BLOCK_SIZE;
+
                     const block = [];
                     for (let by = 0; by < this.BLOCK_SIZE; by++) {
-                        const blockRow = [];
+                        const row = [];
                         for (let bx = 0; bx < this.BLOCK_SIZE; bx++) {
-                            const px = x * this.BLOCK_SIZE + bx;
-                            const py = y * this.BLOCK_SIZE + by;
-                            
+                            const px = bx0 + bx;
+                            const py = by0 + by;
                             if (px < width && py < height) {
                                 const idx = (py * width + px) * 4;
-                                const [r, g, b] = [pixels[idx], pixels[idx+1], pixels[idx+2]];
-                                const [y, u, v] = this.rgbToYuv(r, g, b);
-                                blockRow.push(y); // 只处理亮度通道
+                                const r = pixels[idx];
+                                const g = pixels[idx + 1];
+                                const b = pixels[idx + 2];
+                                const [Y] = this.rgbToYuv(r, g, b);
+                                row.push(Y);
                             } else {
-                                blockRow.push(0);
+                                row.push(0);
                             }
                         }
-                        block.push(blockRow);
+                        block.push(row);
                     }
-                    
-                    // 对块进行DCT变换
+
                     const dctBlock = this.dct2D(block);
-                    
-                    // 提取水印位
-                    const embedPos = 5;
-                    
-                    if (dctBlock[embedPos] && dctBlock[embedPos][embedPos] !== undefined) {
-                        // 根据系数的量化误差判断水印位
+                    if (dctBlock[embedPos] && typeof dctBlock[embedPos][embedPos] === 'number') {
                         const value = dctBlock[embedPos][embedPos];
-                        
-                        // 计算量化后的基础值
-                        const quantized = Math.round(value / this.Q_FACTOR) * this.Q_FACTOR;
-                        
-                        // 计算实际值与量化值的差异
-                        const difference = value - quantized;
-                        
-                        // 关键修复：根据差异的方向和大小来判断嵌入的位
-                        // 由于嵌入时使用了 this.Q_FACTOR * this.ALPHA 来修改系数
-                        // 我们可以通过判断差异是正还是负来确定嵌入的是1还是0
-                        const embedStrength = this.Q_FACTOR * this.ALPHA;
-                        
-                        // 增加调试信息，查看ALPHA和embedStrength的值
-                        if (i < 5) { // 只对前几个块显示这些信息以避免过多日志
-                            console.log(`  ALPHA: ${this.ALPHA}, embedStrength: ${embedStrength}`);
-                            console.log(`  阈值: 正阈值=${(embedStrength * 0.3).toFixed(4)}, 负阈值=${(-embedStrength * 0.3).toFixed(4)}`);
-                        }
-                        
-                        // 进一步优化阈值判断逻辑，提高检测精度
-                        // 对于差异接近0的情况，我们采用更严格的判断标准
-                        if (Math.abs(difference) > embedStrength * 0.3) {
-                            bit = difference > 0 ? 1 : 0;
-                        } else {
-                            // 对于差异较小的情况，我们尝试使用更精确的判断
-                            // 计算实际值与理想修改值的接近程度
-                            const idealOneValue = quantized + embedStrength;
-                            const idealZeroValue = quantized - embedStrength;
-                            const distanceToOne = Math.abs(value - idealOneValue);
-                            const distanceToZero = Math.abs(value - idealZeroValue);
-                            bit = distanceToOne < distanceToZero ? 1 : 0;
-                        }
-                        
-                        // 为了提高稳定性，对于差异非常小的情况，我们保持原值为0
-                        if (Math.abs(difference) < embedStrength * 0.1) {
-                            bit = 0;
-                        }
-                        
-                        // 详细调试信息
-                        if (i < 5 || i > watermarkLength - 5) {
-                            console.log(`块${i}/${watermarkLength}: 实际值=${value.toFixed(4)}, 量化值=${quantized.toFixed(4)}, 差异=${difference.toFixed(4)}`);
-                            console.log(`  初始判断: ${bit} (差异 > ${(embedStrength*0.3).toFixed(4)} ? 1 : (差异 < ${(-embedStrength*0.3).toFixed(4)} ? 0 : 0))`);
-                        }
-                        
-                        // 对于边缘情况，如果差异较小，尝试使用更精确的判断
-                        if (Math.abs(difference) < embedStrength) {
-                            // 更准确的判断方式
-                            const preciseBit = difference > 0 ? 1 : 0;
-                            if (i < 5 || i > watermarkLength - 5) {
-                                console.log(`  边缘情况判断: ${preciseBit} (差异 > 0 ? 1 : 0)`);
-                            }
-                            if (bit !== preciseBit) {
-                                if (i < 5 || i > watermarkLength - 5) {
-                                    console.log(`  位值修正: 从 ${bit} 改为 ${preciseBit}`);
-                                }
-                                bit = preciseBit;
-                            }
-                        }
-                    } else {
-                        if (i < 5 || i > watermarkLength - 5) {
-                            console.log(`块${i}/${watermarkLength}: 无效的DCT块位置，使用默认位值0`);
-                        }
+                        const quant = Math.round(value / this.Q_FACTOR) * this.Q_FACTOR;
+                        const diff  = value - quant;
+                        const bit   = diff >= 0 ? 1 : 0;
+                        votes[bitIndex] += bit ? 1 : -1;
                     }
-                } else if (i % 100 === 0) {
-                    // 只对每100个超出范围的块记录一次日志，避免过多日志
-                    console.log(`块${i}/${watermarkLength}: 超出块范围，使用默认位值0`);
-                }
-                
-                // 存储提取的位
-                extractedBits.push(bit);
-                if (i < 5 || i > watermarkLength - 5) { // 只显示前5个和后5个块的详细信息
-                    console.log(`  最终提取的位: ${bit}`);
-                }
-                
-                // 更新进度
-                if (i % 10 === 0) {
-                    this.showProgress(Math.floor((i / watermarkLength) * 80));
                 }
             }
-            
-            console.log('=== 水印提取完成 ===');
-            console.log('最终提取的总位数:', extractedBits.length);
-            console.log('前32位（文本长度）:', extractedBits.slice(0, 32).join(''));
-            
+
+            const extractedBits = new Array(fullBits).fill(0);
+            for (let i = 0; i < effectiveBits; i++) {
+                extractedBits[i] = votes[i] >= 0 ? 1 : 0;
+            }
             return extractedBits;
         }
-    
-    // 显示进度条
-    showProgress(progress) {
-        const progressBar = document.getElementById('progressBar');
-        if (!progressBar) return;
-        
-        progressBar.style.display = 'block';
-        progressBar.querySelector('div').style.width = progress + '%';
-    }
-        
-    // 隐藏进度条
-    hideProgress() {
-        const progressBar = document.getElementById('progressBar');
-        if (!progressBar) return;
-        
-        progressBar.style.display = 'none';
-        progressBar.querySelector('div').style.width = '0%';
-    }
-        
-    // 显示通知
-    showNotification(message, type = 'info') {
-        // 移除已存在的通知
-        const existingNotification = document.querySelector('.notification');
-        if (existingNotification) {
-            existingNotification.remove();
-        }
-        
-        // 创建新通知
-        const notification = document.createElement('div');
-        notification.className = `notification ${type}`;
-        notification.textContent = message;
-        document.body.appendChild(notification);
-        
-        // 显示通知
-        setTimeout(() => {
-            notification.classList.add('show');
-        }, 10);
-        
-        // 3秒后隐藏通知
-        setTimeout(() => {
-            notification.classList.remove('show');
-            setTimeout(() => {
-                notification.remove();
-            }, 300);
-        }, 3000);
-    }
-        
-    // 下载文件
-    downloadFile(blob, filename) {
-        try {
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            setTimeout(() => {
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-            }, 100);
-        } catch (error) {
-            console.error('下载文件失败:', error);
-            this.showNotification('下载文件失败', 'error');
-        }
-    }
-}
 
-// 页面加载完成后初始化
-    document.addEventListener('DOMContentLoaded', function() {
-        const blindWatermark = new ClaudeBlindWatermark();
-        
-        // 水印图片预览
-        document.getElementById('watermarkImageInput').addEventListener('change', async function() {
-            if (this.files[0]) {
-                try {
-                    const wmInfo = await blindWatermark.prepareWatermarkImage(this.files[0]);
-                    showWatermarkPreview(wmInfo.data, false);
-                    // 清空文字输入
-                    document.getElementById('watermarkText').value = '';
-                } catch (error) {
-                    console.error('水印图片加载失败:', error);
-                    blindWatermark.showNotification('水印图片加载失败: ' + error.message, 'error');
+        async extractWatermark(imageInfo, password, isText) {
+            if (!isText) {
+                const bits = this._extractBitsCore(imageInfo, password);
+                return { bits };
+            }
+
+            const transforms = ['none', 'flipH', 'flipV', 'flipHV'];
+            let best = { bits: null, text: "", valid: false, transform: 'none' };
+
+            for (let i = 0; i < transforms.length; i++) {
+                const t = transforms[i];
+                const transformed = this.applyTransform(imageInfo, t);
+                const bits = this._extractBitsCore(transformed, password);
+                const r = this.decodeWatermarkText(bits);
+                if (r.valid && r.text && r.text.length > 0) {
+                    best.bits = bits;
+                    best.text = r.text;
+                    best.valid = true;
+                    best.transform = t;
+                    break;
+                }
+                if (!best.bits) {
+                    best.bits = bits;
+                    best.text = "";
+                    best.valid = false;
+                    best.transform = t;
                 }
             }
-        });
-        
-        // 水印文字预览
-        document.getElementById('watermarkText').addEventListener('input', function() {
-            const text = this.value.trim();
-            if (text) {
-                showWatermarkPreview(text, true);
-                // 清空图片输入
-                document.getElementById('watermarkImageInput').value = '';
-            } else {
-                document.getElementById('watermarkPreview').innerHTML = '';
-            }
-        });
-        
-        // 加密按钮事件
-        document.getElementById('encryptButton').addEventListener('click', async function() {
-            const button = this;
-            const originalText = button.textContent;
-            button.disabled = true;
-            button.textContent = '处理中...';
-            
-            try {
-                blindWatermark.showProgress(0);
-                
-                const mediaFile = document.getElementById('mediaInput').files[0];
-                const watermarkImageFile = document.getElementById('watermarkImageInput').files[0];
-                const watermarkText = document.getElementById('watermarkText').value.trim();
-                const password = document.getElementById('password').value;
-                
-                if (!mediaFile) {
-                    blindWatermark.showNotification('请选择要加密的图片', 'warning');
-                    return;
-                }
-                
-                if (!watermarkImageFile && !watermarkText) {
-                    blindWatermark.showNotification('请选择水印图片或输入水印文字', 'warning');
-                    return;
-                }
-                
-                blindWatermark.showProgress(10);
-                
-                // 加载原图
-                const imageInfo = await blindWatermark.loadImage(mediaFile);
-                blindWatermark.showProgress(20);
-                
-                // 准备水印数据
-                let watermarkBits;
-                if (watermarkImageFile) {
-                    const wmInfo = await blindWatermark.prepareWatermarkImage(watermarkImageFile);
-                    watermarkBits = wmInfo.data;
-                    blindWatermark.showProgress(30);
-                } else {
-                    watermarkBits = blindWatermark.textToWatermarkData(watermarkText);
-                    blindWatermark.showProgress(30);
-                }
-                
-                // 嵌入水印
-                blindWatermark.showProgress(40);
-                const resultBlob = await blindWatermark.embedWatermark(imageInfo, watermarkBits, password);
-                
-                blindWatermark.showProgress(90);
-                
-                // 下载结果
-                const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
-                const filename = `claude_watermarked_${timestamp}.png`;
-                blindWatermark.downloadFile(resultBlob, filename);
-                
-                blindWatermark.showProgress(100);
-                blindWatermark.showNotification('水印嵌入成功！图片已开始下载。', 'success');
-                
-            } catch (error) {
-                console.error('加密失败:', error);
-                blindWatermark.showNotification('加密失败: ' + error.message, 'error');
-            } finally {
-                button.disabled = false;
-                button.textContent = originalText;
-                setTimeout(() => blindWatermark.hideProgress(), 500);
-            }
-        });
-        
-        // 解密按钮事件
-        document.getElementById('decryptButton').addEventListener('click', async function() {
-            const button = this;
-            const originalText = button.textContent;
-            button.disabled = true;
-            button.textContent = '处理中...';
-            
-            try {
-                blindWatermark.showProgress(0);
-                
-                const encodedFile = document.getElementById('encodedMediaInput').files[0];
-                const password = document.getElementById('decodePassword').value;
-                const selectedType = document.querySelector('input[name="wmType"]:checked').value;
-                
-                if (!encodedFile) {
-                    blindWatermark.showNotification('请选择带水印的图片', 'warning');
-                    return;
-                }
-                
-                blindWatermark.showProgress(10);
-                
-                // 加载带水印的图片
-                const imageInfo = await blindWatermark.loadImage(encodedFile);
-                blindWatermark.showProgress(20);
-                
-                // 提取水印
-                blindWatermark.showProgress(30);
-                const extractedBits = await blindWatermark.extractWatermark(imageInfo, password, selectedType === 'text');
-                
-                blindWatermark.showProgress(90);
-                
-                const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
-                const resultDiv = document.getElementById('extractResult');
-                
-                if (selectedType === 'text') {
-                    // 转换为文字
-                    const text = blindWatermark.watermarkDataToText(extractedBits);
-                    
-                    // 显示文字结果
-                    resultDiv.innerHTML = `
-                        <div style="background: #f5f5f5; padding: 15px; border-radius: 5px;">
-                            <strong>提取的文字水印：</strong><br>
-                            <div style="font-family: monospace; background: white; padding: 10px; border-radius: 3px; margin-top: 10px; min-height: 30px; word-break: break-all;">
-                                ${text || '(提取失败或水印为空)'}
-                            </div>
-                            <small style="color: #666; margin-top: 10px; display: block;">
-                                提取状态: ${text ? '成功' : '失败'} | 字符数: ${text.length}
-                            </small>
-                        </div>
-                    `;
-                    
-                    if (text) {
-                        // 下载文字文件
-                        const blob = new Blob([text], { type: 'text/plain' });
-                        blindWatermark.downloadFile(blob, `claude_extracted_text_${timestamp}.txt`);
-                        blindWatermark.showNotification('文字水印提取成功！', 'success');
-                    } else {
-                        blindWatermark.showNotification('文字水印提取失败，请检查密码是否正确', 'error');
+
+            this.showProgress(80);
+            return best;
+        }
+
+        // ===== UI 辅助 =====
+        showProgress(progress) {
+            const progressBar = document.getElementById('progressBar');
+            if (!progressBar) return;
+            progressBar.style.display = 'block';
+            const inner = progressBar.querySelector('div');
+            if (inner) inner.style.width = progress + '%';
+        }
+
+        hideProgress() {
+            const progressBar = document.getElementById('progressBar');
+            if (!progressBar) return;
+            progressBar.style.display = 'none';
+            const inner = progressBar.querySelector('div');
+            if (inner) inner.style.width = '0%';
+        }
+
+        showNotification(message, type) {
+            type = type || 'info';
+            const existing = document.querySelector('.notification');
+            if (existing) existing.remove();
+
+            const notification = document.createElement('div');
+            notification.className = 'notification ' + type;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+
+            setTimeout(function () {
+                notification.classList.add('show');
+            }, 10);
+            setTimeout(function () {
+                notification.classList.remove('show');
+                setTimeout(function () {
+                    if (notification.parentNode) {
+                        notification.parentNode.removeChild(notification);
                     }
-                } else {
-                    // 转换为图像
-                    const canvas = document.createElement('canvas');
-                    canvas.width = blindWatermark.WATERMARK_SIZE;
-                    canvas.height = blindWatermark.WATERMARK_SIZE;
-                    const ctx = canvas.getContext('2d');
-                    const imgData = ctx.createImageData(canvas.width, canvas.height);
-                    
-                    for (let i = 0; i < extractedBits.length && i < canvas.width * canvas.height; i++) {
-                        const row = Math.floor(i / canvas.width);
-                        const col = i % canvas.width;
-                        const idx = (row * canvas.width + col) * 4;
-                        const value = extractedBits[i] > 0.5 ? 255 : 0;
-                        
-                        imgData.data[idx] = value;
-                        imgData.data[idx + 1] = value;
-                        imgData.data[idx + 2] = value;
-                        imgData.data[idx + 3] = 255;
-                    }
-                    
-                    ctx.putImageData(imgData, 0, 0);
-                    
-                    // 显示图像结果
-                    resultDiv.innerHTML = `
-                        <div style="background: #f5f5f5; padding: 15px; border-radius: 5px;">
-                            <strong>提取的图像水印 (128x128)：</strong><br>
-                        </div>
-                    `;
-                    resultDiv.querySelector('div').appendChild(canvas);
-                    
-                    // 下载图像文件
-                    canvas.toBlob((blob) => {
-                        blindWatermark.downloadFile(blob, `claude_extracted_watermark_${timestamp}.png`);
-                    }, 'image/png');
-                    
-                    blindWatermark.showNotification('图像水印提取成功！水印图片已开始下载。', 'success');
+                }, 300);
+            }, 3000);
+        }
+
+        downloadFile(blob, filename) {
+            try {
+                if (!blob) {
+                    throw new Error('空的 Blob');
                 }
-                
-            } catch (error) {
-                console.error('解密失败:', error);
-                blindWatermark.showNotification('解密失败: ' + error.message, 'error');
-            } finally {
-                button.disabled = false;
-                button.textContent = originalText;
-                setTimeout(() => blindWatermark.hideProgress(), 500);
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(function () {
+                    if (a.parentNode) a.parentNode.removeChild(a);
+                    URL.revokeObjectURL(url);
+                }, 100);
+            } catch (e) {
+                console.error('下载文件失败:', e);
+                this.showNotification('下载文件失败: ' + (e && e.message ? e.message : e), 'error');
             }
-        });
-        
-        // 显示水印预览
-        function showWatermarkPreview(data, isText) {
-            const previewDiv = document.getElementById('watermarkPreview');
-            if (!previewDiv) return;
-            
-            previewDiv.innerHTML = '';
-            
-            if (isText) {
-                const textDiv = document.createElement('div');
-                textDiv.style.cssText = 'background: #f5f5f5; padding: 10px; border-radius: 5px; margin: 10px 0; font-family: monospace;';
-                
-                textDiv.innerHTML = `
-                    <strong>文字水印预览:</strong><br>
-                    原文: "${data}"<br>
-                    <small style="color: #666;">
-                    段长度: ${data.length + 5} 字节<br>
-                    重复次数: ~${Math.floor(blindWatermark.WATERMARK_SIZE * blindWatermark.WATERMARK_SIZE / 8 / (data.length + 5))} 次<br>
-                    总长度: ${blindWatermark.WATERMARK_SIZE * blindWatermark.WATERMARK_SIZE / 8} 字节 (${blindWatermark.WATERMARK_SIZE * blindWatermark.WATERMARK_SIZE} bits)
-                    </small>
-                `;
-                previewDiv.appendChild(textDiv);
+        }
+    }
+
+    // ===== 页面初始化和事件绑定 =====
+    document.addEventListener('DOMContentLoaded', function () {
+        try {
+            console.log('[BlindWatermark] DOMContentLoaded');
+
+            const blindWatermark = new ClaudeBlindWatermark();
+
+            const mediaInput          = document.getElementById('mediaInput');
+            const watermarkImageInput = document.getElementById('watermarkImageInput');
+            const watermarkTextInput  = document.getElementById('watermarkText');
+            const passwordInput       = document.getElementById('password');
+            const encodedMediaInput   = document.getElementById('encodedMediaInput');
+            const decodePasswordInput = document.getElementById('decodePassword');
+            const encryptButton       = document.getElementById('encryptButton');
+            const decryptButton       = document.getElementById('decryptButton');
+            const resultDiv           = document.getElementById('extractResult');
+
+            if (!mediaInput || !watermarkImageInput || !watermarkTextInput ||
+                !passwordInput || !encodedMediaInput || !decodePasswordInput ||
+                !encryptButton || !decryptButton || !resultDiv) {
+                console.error('[BlindWatermark] 必要的 DOM 元素缺失');
+                alert('盲水印脚本初始化失败：页面上有必要的元素缺失，请检查 id 是否一致');
                 return;
             }
 
-            // 图像水印预览
-            const canvas = document.createElement('canvas');
-            canvas.width = blindWatermark.WATERMARK_SIZE;
-            canvas.height = blindWatermark.WATERMARK_SIZE;
-            canvas.style.cssText = 'border: 1px solid #ddd; margin: 10px 0; max-width: 128px; max-height: 128px;';
+            // 水印预览
+            function showWatermarkPreview(data, isText) {
+                const previewDiv = document.getElementById('watermarkPreview');
+                if (!previewDiv) return;
+                previewDiv.innerHTML = '';
 
-            const ctx = canvas.getContext('2d');
-            const imageData = ctx.createImageData(blindWatermark.WATERMARK_SIZE, blindWatermark.WATERMARK_SIZE);
+                if (isText) {
+                    const encoder = new TextEncoder();
+                    const bytes   = encoder.encode(data);
+                    const totalBits  = blindWatermark.WATERMARK_SIZE * blindWatermark.WATERMARK_SIZE;
+                    const headerBits = 16 + 16 + 16;
+                    const capacityBytes = Math.floor((totalBits - headerBits) / 8);
 
-            for (let i = 0; i < data.length; i++) {
-                const value = data[i] > 0.5 ? 255 : 0;
-                imageData.data[i * 4] = value;
-                imageData.data[i * 4 + 1] = value;
-                imageData.data[i * 4 + 2] = value;
-                imageData.data[i * 4 + 3] = 255;
+                    const textDiv = document.createElement('div');
+                    textDiv.style.cssText = 'background:#f5f5f5;padding:10px;border-radius:5px;margin:10px 0;font-family:monospace;';
+                    textDiv.innerHTML =
+                        '<strong>文字水印预览:</strong><br>' +
+                        '原文: "' + data.replace(/</g, '&lt;') + '"<br>' +
+                        '<small style="color:#666;">' +
+                        '预计 UTF-8 字节数: ' + bytes.length + '<br>' +
+                        '最大可嵌入字节数: ' + capacityBytes + '（超过部分将被截断）<br>' +
+                        '水印平面: ' + blindWatermark.WATERMARK_SIZE + 'x' + blindWatermark.WATERMARK_SIZE +
+                        ' = ' + totalBits + ' bits' +
+                        '</small>';
+                    previewDiv.appendChild(textDiv);
+                    return;
+                }
+
+                const canvas = document.createElement('canvas');
+                canvas.width  = blindWatermark.WATERMARK_SIZE;
+                canvas.height = blindWatermark.WATERMARK_SIZE;
+                canvas.style.cssText = 'border:1px solid #ddd;margin:10px 0;max-width:128px;max-height:128px;';
+                const ctx = canvas.getContext('2d');
+                const imageData = ctx.createImageData(blindWatermark.WATERMARK_SIZE, blindWatermark.WATERMARK_SIZE);
+
+                for (let i = 0; i < data.length && i < blindWatermark.WATERMARK_SIZE * blindWatermark.WATERMARK_SIZE; i++) {
+                    const value = data[i] > 0.5 ? 255 : 0;
+                    imageData.data[i * 4]     = value;
+                    imageData.data[i * 4 + 1] = value;
+                    imageData.data[i * 4 + 2] = value;
+                    imageData.data[i * 4 + 3] = 255;
+                }
+                ctx.putImageData(imageData, 0, 0);
+
+                const label = document.createElement('div');
+                label.textContent = '水印预览 (' + blindWatermark.WATERMARK_SIZE + 'x' + blindWatermark.WATERMARK_SIZE + ' 黑白):';
+                label.style.fontWeight   = 'bold';
+                label.style.marginBottom = '10px';
+
+                previewDiv.appendChild(label);
+                previewDiv.appendChild(canvas);
             }
 
-            ctx.putImageData(imageData, 0, 0);
-
-            const label = document.createElement('div');
-            label.textContent = '水印预览 (128x128黑白):';
-            label.style.fontWeight = 'bold';
-            label.style.marginBottom = '10px';
-
-            previewDiv.appendChild(label);
-            previewDiv.appendChild(canvas);
-        }
-
-        // 创建加载指示器元素（如果不存在）
-        if (!document.getElementById('loadingIndicator')) {
-            const loadingElement = document.createElement('div');
-            loadingElement.id = 'loadingIndicator';
-            loadingElement.style.display = 'none';
-            document.body.appendChild(loadingElement);
-        }
-
-        // 按钮禁用处理
-        document.querySelectorAll('.disable-on-click').forEach(button => {
-            button.addEventListener('click', function() {
-                // 防止双击
-                this.disabled = true;
-                setTimeout(() => {
-                    if (!this.textContent.includes('中...')) {
-                        this.disabled = false;
-                    }
-                }, 1000);
+            // 图像水印选择
+            watermarkImageInput.addEventListener('change', function () {
+                if (this.files && this.files[0]) {
+                    blindWatermark.prepareWatermarkImage(this.files[0])
+                        .then(function (wmInfo) {
+                            showWatermarkPreview(wmInfo.data, false);
+                            watermarkTextInput.value = '';
+                        })
+                        .catch(function (e) {
+                            console.error('水印图片加载失败:', e);
+                            blindWatermark.showNotification('水印图片加载失败: ' + e.message, 'error');
+                        });
+                } else {
+                    const previewDiv = document.getElementById('watermarkPreview');
+                    if (previewDiv) previewDiv.innerHTML = '';
+                }
             });
-        });
+
+            // 文字水印输入
+            watermarkTextInput.addEventListener('input', function () {
+                const text = this.value.trim();
+                if (text) {
+                    showWatermarkPreview(text, true);
+                    watermarkImageInput.value = '';
+                } else {
+                    const previewDiv = document.getElementById('watermarkPreview');
+                    if (previewDiv) previewDiv.innerHTML = '';
+                }
+            });
+
+            // 加密按钮
+            encryptButton.addEventListener('click', async function () {
+                console.log('[BlindWatermark] 点击加密按钮');
+                const button = this;
+                const originalText = button.textContent;
+                button.disabled = true;
+                button.textContent = '处理中...';
+
+                try {
+                    blindWatermark.showProgress(0);
+
+                    const mediaFile         = mediaInput.files[0];
+                    const watermarkImageFile = watermarkImageInput.files[0];
+                    const watermarkText     = watermarkTextInput.value.trim();
+                    const password          = passwordInput.value;
+
+                    if (!mediaFile) {
+                        blindWatermark.showNotification('请选择要加密的图片', 'warning');
+                        return;
+                    }
+                    if (!watermarkImageFile && !watermarkText) {
+                        blindWatermark.showNotification('请选择水印图片或输入水印文字', 'warning');
+                        return;
+                    }
+
+                    blindWatermark.showProgress(10);
+                    const imageInfo = await blindWatermark.loadImage(mediaFile);
+                    blindWatermark.showProgress(20);
+
+                    let watermarkBits;
+                    if (watermarkImageFile) {
+                        const wmInfo = await blindWatermark.prepareWatermarkImage(watermarkImageFile);
+                        watermarkBits = wmInfo.data;
+                    } else {
+                        watermarkBits = blindWatermark.textToWatermarkData(watermarkText);
+                    }
+                    blindWatermark.showProgress(40);
+
+                    const resultBlob = await blindWatermark.embedWatermark(imageInfo, watermarkBits, password);
+                    blindWatermark.showProgress(90);
+
+                    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
+                    const filename  = 'claude_watermarked_' + timestamp + '.png';
+                    blindWatermark.downloadFile(resultBlob, filename);
+
+                    blindWatermark.showProgress(100);
+                    blindWatermark.showNotification('水印嵌入成功！图片已开始下载。', 'success');
+                } catch (e) {
+                    console.error('加密失败:', e);
+                    blindWatermark.showNotification('加密失败: ' + e.message, 'error');
+                } finally {
+                    button.disabled = false;
+                    button.textContent = originalText;
+                    setTimeout(function () { blindWatermark.hideProgress(); }, 500);
+                }
+            });
+
+            // 解密按钮
+            decryptButton.addEventListener('click', async function () {
+                console.log('[BlindWatermark] 点击解密按钮');
+                const button = this;
+                const originalText = button.textContent;
+                button.disabled = true;
+                button.textContent = '处理中...';
+
+                try {
+                    blindWatermark.showProgress(0);
+                    const encodedFile  = encodedMediaInput.files[0];
+                    const password     = decodePasswordInput.value;
+                    const selectedTypeInput = document.querySelector('input[name="wmType"]:checked');
+                    const selectedType = selectedTypeInput ? selectedTypeInput.value : 'text';
+
+                    if (!encodedFile) {
+                        blindWatermark.showNotification('请选择带水印的图片', 'warning');
+                        return;
+                    }
+
+                    blindWatermark.showProgress(10);
+                    const imageInfo = await blindWatermark.loadImage(encodedFile);
+                    blindWatermark.showProgress(20);
+
+                    const isText = (selectedType === 'text');
+                    blindWatermark.showProgress(30);
+                    const result = await blindWatermark.extractWatermark(imageInfo, password, isText);
+                    blindWatermark.showProgress(90);
+
+                    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
+
+                    if (isText) {
+                        const text = result.text || '';
+                        resultDiv.innerHTML =
+                            '<div style="background:#f5f5f5;padding:15px;border-radius:5px;">' +
+                            '<strong>提取的文字水印：</strong><br>' +
+                            '<div style="font-family:monospace;background:white;padding:10px;border-radius:3px;margin-top:10px;min-height:30px;word-break:break-all;">' +
+                            (text || '(提取失败或水印为空)') +
+                            '</div>' +
+                            '<small style="color:#666;margin-top:10px;display:block;">' +
+                            '提取状态: ' + (result.valid && text ? '成功' : '失败') +
+                            ' | 字符数: ' + text.length +
+                            ' | 使用变换: ' + result.transform +
+                            '</small>' +
+                            '</div>';
+
+                        if (result.valid && text) {
+                            const blob = new Blob([text], { type: 'text/plain' });
+                            blindWatermark.downloadFile(blob, 'claude_extracted_text_' + timestamp + '.txt');
+                            blindWatermark.showNotification('文字水印提取成功！', 'success');
+                        } else {
+                            blindWatermark.showNotification('文字水印提取失败，请检查密码或图片是否被严重破坏', 'error');
+                        }
+                    } else {
+                        const bits   = result.bits || [];
+                        const canvas = document.createElement('canvas');
+                        canvas.width  = blindWatermark.WATERMARK_SIZE;
+                        canvas.height = blindWatermark.WATERMARK_SIZE;
+                        const ctx     = canvas.getContext('2d');
+                        const imgData = ctx.createImageData(canvas.width, canvas.height);
+
+                        for (let i = 0; i < bits.length && i < canvas.width * canvas.height; i++) {
+                            const idx = i * 4;
+                            const value = bits[i] > 0.5 ? 255 : 0;
+                            imgData.data[idx]     = value;
+                            imgData.data[idx + 1] = value;
+                            imgData.data[idx + 2] = value;
+                            imgData.data[idx + 3] = 255;
+                        }
+                        ctx.putImageData(imgData, 0, 0);
+
+                        resultDiv.innerHTML =
+                            '<div style="background:#f5f5f5;padding:15px;border-radius:5px;">' +
+                            '<strong>提取的图像水印 (' + blindWatermark.WATERMARK_SIZE + 'x' +
+                            blindWatermark.WATERMARK_SIZE + ')：</strong><br>' +
+                            '</div>';
+                        const container = resultDiv.querySelector('div');
+                        container.appendChild(canvas);
+
+                        if (canvas.toBlob) {
+                            canvas.toBlob(function (blob) {
+                                blindWatermark.downloadFile(blob, 'claude_extracted_watermark_' + timestamp + '.png');
+                            }, 'image/png');
+                        }
+                        blindWatermark.showNotification('图像水印提取完成！', 'success');
+                    }
+                } catch (e) {
+                    console.error('解密失败:', e);
+                    blindWatermark.showNotification('解密失败: ' + e.message, 'error');
+                } finally {
+                    button.disabled = false;
+                    button.textContent = originalText;
+                    setTimeout(function () { blindWatermark.hideProgress(); }, 500);
+                }
+            });
+
+            // 防止按钮连点（轻量版）
+            const btns = document.querySelectorAll('.disable-on-click');
+            for (let i = 0; i < btns.length; i++) {
+                btns[i].addEventListener('click', function () {
+                    const self = this;
+                    if (self.disabled) return;
+                    setTimeout(function () {
+                        if (!String(self.textContent || '').includes('中...')) {
+                            self.disabled = false;
+                        }
+                    }, 1000);
+                });
+            }
+
+            // loading 占位元素
+            if (!document.getElementById('loadingIndicator')) {
+                const loadingElement = document.createElement('div');
+                loadingElement.id = 'loadingIndicator';
+                loadingElement.style.display = 'none';
+                document.body.appendChild(loadingElement);
+            }
+
+            console.log('[BlindWatermark] 初始化完成');
+        } catch (e) {
+            console.error('[BlindWatermark] 初始化失败:', e);
+            alert('盲水印脚本初始化失败：' + (e && e.message ? e.message : e));
+        }
     });
+})();
 </script>
