@@ -8,17 +8,8 @@
   <link rel="icon" href="{{ site.baseurl }}/ico.svg" type="image/svg+xml">
   <!-- 引入 CSS -->
   <link rel="stylesheet" href="{{ site.baseurl }}/css/style.css">
-  <style>
-    /* 全屏 canvas 固定于背景 */
-    #bgCanvas {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      z-index: -1;
-    }
-  </style>
+  <link rel="stylesheet" href="{{ site.baseurl }}/css/tool_common.css">
+
 </head>
 
 
@@ -26,8 +17,8 @@
 <body>
   <!-- 全屏背景 canvas -->
   <canvas id="bgCanvas"></canvas>
-   <!-- 这里放置一个按钮，用于在小屏上点击显示/隐藏 sidebar -->
-  <button id="toggleBtn" class="hamburger-btn" type = "or_button">&#9776;</button>
+   <!-- 侧边栏切换按钮 -->
+  <button id="toggleBtn" class="hamburger-btn" type="button" aria-label="打开导航菜单" aria-expanded="false">&#9776;</button>
   <div class="wrapper">
     <!-- 左侧导航栏 -->
     <nav class="sidebar" id="sidebar">
@@ -42,13 +33,14 @@
           <ul class="sub-nav">
             <li><a href="{{ site.baseurl }}/tools/img&zip.html">图片+ZIP 生成器</a></li>
             <li><a href="{{ site.baseurl }}/tools/blind_watermark.html">盲水印/图片隐藏水印加密</a></li>
-            <li><a href="{{ site.baseurl }}/tools/blind_claude.html">盲水印claude</a></li>
+            <li><a href="{{ site.baseurl }}/tools/blind_claude.html">盲水印克劳德</a></li>
             <li><a href="{{ site.baseurl }}/tools/binary_barcode.html">文字转二进制/条形码</a></li>
             <li><a href="{{ site.baseurl }}/tools/phantom_tank.html">幻影坦克</a></li>
             <li><a href="{{ site.baseurl }}/tools/hideQCcode.html">图片隐藏二维码</a></li>
             <li><a href="{{ site.baseurl }}/tools/text2png.html">文字转图片</a></li>
             <li><a href="{{ site.baseurl }}/tools/morse_code.html">摩斯密码</a></li>
             <li><a href="{{ site.baseurl }}/tools/video2img.html">音频转图片</a></li>
+            <li><a href="{{ site.baseurl }}/tools/low_jpeg.html">有损图片</a></li>
           </ul>
         </li>
         <!-- 博客分组 -->
@@ -81,138 +73,748 @@
   <!-- 引入公共 JavaScript，如果有的话 -->
   <script src="{{ site.baseurl }}/js/common.js"></script>
 
+  <!-- 防重复点击控制器 -->
   <script>
-    // 防重复点击控制器（适用于所有 .disable-on-click 按钮）
     document.addEventListener('DOMContentLoaded', function() {
-      document.querySelectorAll('.disable-on-click').forEach(button => {
-        button.addEventListener('click', async function(e) {
-          e.preventDefault();
-          const btn = this;
-          btn.disabled = true;
-
-          //try {
-            // 执行生成逻辑（需确保 generateFakeImage 函数存在）
-            //await generateFakeImage();
-          //} catch (error) {
-            //alert("生成失败：" + error.message);
-          //}
-
-          // 根据 data-timeout 自动恢复
-          setTimeout(() => {
-            btn.disabled = false;
-          }, parseInt(btn.dataset.timeout) || 60000);
-        });
-      });
-    });
-  </script>
-
-  <!-- 简单JS控制sidebar显示/隐藏 -->
-  <script>
-    const toggleBtn = document.getElementById('toggleBtn');
-    const sidebar = document.getElementById('sidebar');
-    toggleBtn.addEventListener('click', function() {
-      sidebar.classList.toggle('open');  // 切换sidebar的open类
-    });
-  </script>
-
-  <!-- 以下脚本用于绘制全屏背景动画，带有混合色彩和鼠标扰动效果 -->
-  <script>
-    (function() {
-      const canvas = document.getElementById('bgCanvas');
-      const ctx = canvas.getContext('2d');
-
-      // 设置 canvas 尺寸覆盖全屏
-      function resizeCanvas() {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-      }
-      window.addEventListener('resize', resizeCanvas);
-      resizeCanvas();
-
-      // 保存鼠标信息，用于局部扰动
-      let mouseX = -100, mouseY = -100, rippleIntensity = 0;
-      window.addEventListener("mousemove", function(e) {
-        mouseX = e.clientX;
-        mouseY = e.clientY;
-        rippleIntensity = 8; // 鼠标移动时给予扰动初始强度
-      });
-
-      let time = 0;
-
-      // 参数设置
-      const amplitude = 1;          // 正弦波基础振幅
-      const frequency = 0.005;         // 基础波动频率
-      const verticalSpacing = 10;      // 每条水平线间隔
-      const turbulenceAmplitude = 50;   // 基础湍流扰动幅度
-
-      // 简单湍流函数，产生混沌扰动
-      function turbulence(x, y, t) {
-        return (Math.sin(x * 0.01 + t * 0.1) + Math.sin(y * 0.02 + t * 0.1)) / 2 * turbulenceAmplitude;
-      }
-
-      function draw() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        // 使用 "lighter" 模式使颜色混合
-        ctx.globalCompositeOperation = 'lighter';
-
-        // 遍历每条水平线
-        for (let y = 0; y < canvas.height; y += verticalSpacing) {
-          ctx.beginPath();
-          // 创建一个沿水平线的多色线性渐变
-          let grad = ctx.createLinearGradient(0, y, canvas.width, y);
-          grad.addColorStop(0, `hsl(${(time + y * 0.1) % 360}, 80%, 50%)`);
-          grad.addColorStop(0.5, `hsl(${(time + y * 0.1 + 60) % 360}, 80%, 50%)`);
-          grad.addColorStop(1, `hsl(${(time + y * 0.1 + 120) % 360}, 80%, 50%)`);
-          ctx.strokeStyle = grad;
-
-          // 绘制波纹线
-          for (let x = 0; x <= canvas.width; x++) {
-            let baseOffset = Math.sin(x * frequency + time + y * 0.005) * amplitude;
-            let turb = turbulence(x, y, time);
-            // 计算鼠标局部扰动效果
-            const dx = x - mouseX;
-            const dy = y - mouseY;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            let ripple = 0;
-            const rippleRadius = 100; // 鼠标影响半径
-            if (dist < rippleRadius) {
-              let decay = 1 - dist / rippleRadius;
-              ripple = decay * rippleIntensity * Math.sin(x * 0.05 + time * 0.2);
+      // 使用common.js中的工具函数（如果可用）
+      const utils = window.common || {
+        // 降级方案：如果common.js不可用，使用内置的简单实现
+        showLoadingIndicator: function(button) {
+          const originalText = button.innerText;
+          button.setAttribute('data-original-text', originalText);
+          button.innerText = button.dataset.loadingText || '处理中...';
+          
+          // 添加加载状态类
+          if (button.classList) {
+            button.classList.add('loading');
+          }
+          
+          return originalText;
+        },
+        
+        hideLoadingIndicator: function(button, originalText) {
+          button.innerText = originalText;
+          button.removeAttribute('data-original-text');
+          
+          // 移除加载状态类
+          if (button.classList) {
+            button.classList.remove('loading');
+          }
+        },
+        
+        showNotification: function(message, type = 'info') {
+          alert(message); // 简单的降级实现
+        }
+      };
+      
+      // 防重复点击控制器类
+      class ClickGuard {
+        constructor() {
+          this.defaultTimeout = 60000; // 默认超时时间（毫秒）
+          this.activeButtons = new Set(); // 跟踪当前处于活动状态的按钮
+          this.buttonHandlers = new WeakMap(); // 存储按钮和其事件处理器的映射
+        }
+        
+        // 初始化防重复点击功能
+        init() {
+          this.bindButtons();
+        }
+        
+        // 绑定所有带有.disable-on-click类的按钮
+        bindButtons() {
+          const buttons = document.querySelectorAll('.disable-on-click');
+          
+          buttons.forEach(button => {
+            this.bindButton(button);
+          });
+        }
+        
+        // 为单个按钮绑定防重复点击功能
+        bindButton(button) {
+          // 避免重复绑定
+          if (this.buttonHandlers.has(button)) {
+            return;
+          }
+          
+          // 获取按钮的自定义点击处理函数（如果有）
+          const customHandler = this.getCustomHandler(button);
+          
+          // 创建事件处理器
+          const clickHandler = async (e) => {
+            // 检查按钮是否已被禁用
+            if (button.disabled || this.activeButtons.has(button)) {
+              e.preventDefault();
+              return;
             }
-            let offset = baseOffset + turb + ripple;
-            if (x === 0) {
-              ctx.moveTo(x, y + offset);
-            } else {
-              ctx.lineTo(x, y + offset);
+            
+            // 阻止默认行为（除非明确配置不阻止）
+            if (!button.dataset.allowDefault) {
+              e.preventDefault();
+            }
+            
+            try {
+              // 标记按钮为活动状态
+              this.activeButtons.add(button);
+              button.disabled = true;
+              
+              // 保存原始按钮文本并显示加载状态
+              const originalText = common.showLoadingIndicator(button);
+              
+              // 执行自定义处理函数（如果有）
+              if (typeof customHandler === 'function') {
+                try {
+                  await customHandler(button, e);
+                } catch (error) {
+                  console.error('自定义点击处理函数执行失败:', error);
+                  
+                  // 显示错误通知
+                  const errorMessage = button.dataset.errorMessage || `操作失败: ${error.message || '未知错误'}`;
+                  common.showNotification(errorMessage, 'error');
+                }
+              }
+              
+              // 根据data-timeout自动恢复按钮状态
+              const timeout = parseInt(button.dataset.timeout) || this.defaultTimeout;
+              
+              setTimeout(() => {
+                // 恢复按钮状态
+                this.activeButtons.delete(button);
+                button.disabled = false;
+                
+                // 恢复原始文本并移除加载状态
+                common.hideLoadingIndicator(button, originalText);
+              }, timeout);
+              
+            } catch (error) {
+              console.error('防重复点击控制器执行失败:', error);
+              
+              // 确保按钮状态被恢复
+              this.activeButtons.delete(button);
+              button.disabled = false;
+              
+              // 显示错误通知
+              common.showNotification('操作处理异常，请重试', 'error');
+            }
+          };
+          
+          // 绑定事件并存储处理器引用
+          button.addEventListener('click', clickHandler);
+          this.buttonHandlers.set(button, clickHandler);
+        }
+        
+        // 获取按钮的自定义点击处理函数
+        getCustomHandler(button) {
+          // 尝试从data-handler属性获取处理函数名
+          const handlerName = button.dataset.handler;
+          if (handlerName && window[handlerName] && typeof window[handlerName] === 'function') {
+            return window[handlerName];
+          }
+          
+          // 尝试获取data-action属性
+          const actionName = button.dataset.action;
+          if (actionName && window.clickActions && window.clickActions[actionName]) {
+            return window.clickActions[actionName];
+          }
+          
+          // 默认处理函数
+          return null;
+        }
+        
+        // 手动激活指定按钮的防重复点击保护
+        activateButton(button) {
+          if (!button || this.activeButtons.has(button)) return;
+          
+          this.activeButtons.add(button);
+          button.disabled = true;
+          return common.showLoadingIndicator(button);
+        }
+        
+        // 手动停用指定按钮的防重复点击保护
+        deactivateButton(button, originalText) {
+          if (!button || !this.activeButtons.has(button)) return;
+          
+          this.activeButtons.delete(button);
+          button.disabled = false;
+          common.hideLoadingIndicator(button, originalText);
+        }
+        
+        // 获取当前活动按钮数量
+        getActiveButtonCount() {
+          return this.activeButtons.size;
+        }
+        
+        // 解除所有按钮的事件绑定
+        destroy() {
+          // 恢复所有按钮状态
+          this.activeButtons.forEach(button => {
+            try {
+              button.disabled = false;
+              if (button.classList) {
+                button.classList.remove('loading');
+              }
+              // 恢复原始文本
+              const originalText = button.dataset.originalText;
+              if (originalText) {
+                button.innerText = originalText;
+                button.removeAttribute('data-original-text');
+              }
+            } catch (error) {
+              console.warn('清理按钮状态时出错:', error);
+            }
+          });
+          
+          // 清空活动按钮集合
+          this.activeButtons.clear();
+          
+          // 移除所有事件监听器
+          this.buttonHandlers.forEach((handler, button) => {
+            try {
+              button.removeEventListener('click', handler);
+            } catch (error) {
+              console.warn('移除按钮事件监听器时出错:', error);
+            }
+          });
+          
+          // 清空处理器映射
+          this.buttonHandlers = new WeakMap();
+        }
+      }
+      
+      // 初始化防重复点击控制器
+      const clickGuard = new ClickGuard();
+      clickGuard.init();
+      
+      // 暴露到全局，便于调试或其他脚本使用
+      window.clickGuard = clickGuard;
+      
+      // 确保在页面卸载时清理资源
+      window.addEventListener('beforeunload', () => {
+        // 清理活动按钮的状态
+        if (window.clickGuard && window.clickGuard.activeButtons) {
+          window.clickGuard.activeButtons.forEach(button => {
+            try {
+              button.disabled = false;
+              if (button.classList) {
+                button.classList.remove('loading');
+              }
+            } catch (error) {
+              // 忽略清理时的错误
+            }
+          });
+        }
+      });
+    });
+  </script>
+
+  <!-- 侧边栏控制脚本 -->
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // 使用common.js中的工具函数（如果可用）
+      const common = window.common || {
+        // 降级方案：如果common.js不可用，使用内置的简单实现
+        throttle: function(func, limit) {
+          let inThrottle;
+          return function(...args) {
+            if (!inThrottle) {
+              func.apply(this, args);
+              inThrottle = true;
+              setTimeout(() => inThrottle = false, limit);
+            }
+          };
+        },
+        safeJsonParse: function(str, defaultValue = null) {
+          try {
+            return JSON.parse(str);
+          } catch (e) {
+            return defaultValue;
+          }
+        }
+      };
+      
+      // 侧边栏控制类
+      class SidebarManager {
+        constructor() {
+          this.toggleBtn = document.getElementById('toggleBtn');
+          this.sidebar = document.getElementById('sidebar');
+          this.mainWrapper = document.querySelector('.main-wrapper');
+          this.isOpen = false;
+          this.resizeThrottleTime = 250; // 窗口调整节流时间(ms)
+          this.listeners = [];
+          this.mediaQuery = window.matchMedia('(max-width: 768px)');
+          
+          if (!this.toggleBtn || !this.sidebar) {
+            console.warn('侧边栏相关元素未找到');
+            return;
+          }
+          
+          // 初始化侧边栏状态
+          this.initializeState();
+          this.init();
+        }
+        
+        // 初始化侧边栏状态
+        initializeState() {
+          // 从localStorage加载侧边栏状态
+          const savedState = common.safeJsonParse(localStorage.getItem('sidebarState'));
+          
+          if (savedState && savedState.isOpen !== undefined) {
+            this.isOpen = savedState.isOpen;
+          } else {
+            // 默认状态：小屏幕时关闭
+            this.isOpen = false;
+          }
+          
+          // 应用初始状态
+          if (this.isOpen) {
+            this.sidebar.classList.add('open');
+            if (this.mainWrapper) {
+              this.mainWrapper.classList.add('sidebar-open');
             }
           }
-          ctx.lineWidth = 1;
-          ctx.stroke();
         }
-
-        // 恢复默认合成模式
-        ctx.globalCompositeOperation = 'source-over';
-
-        // 叠加水平渐变遮罩：左侧完全透明，右侧50%不透明
-        ctx.save();
-        ctx.globalCompositeOperation = 'destination-in';
-        let mask = ctx.createLinearGradient(0, 0, canvas.width, 0);
-        mask.addColorStop(0, 'rgba(0,0,0,0)');       // 左侧：全透明
-        mask.addColorStop(1, 'rgba(0,0,0,0.25)');     // 右侧：50%不透明
-        ctx.fillStyle = mask;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.restore();
-
-        // 衰减鼠标扰动强度，使扰动逐渐消失
-        rippleIntensity *= 0.98;
-
-        time += 0.02;  // 平缓时间步长
-        requestAnimationFrame(draw);
+        
+        init() {
+          this.setupEventListeners();
+          this.highlightCurrentPage();
+          this.handleResize(); // 初始检查
+        }
+        
+        setupEventListeners() {
+          // 点击按钮切换
+          const toggleHandler = () => this.toggleSidebar();
+          this.toggleBtn.addEventListener('click', toggleHandler);
+          this.listeners.push({ element: this.toggleBtn, event: 'click', handler: toggleHandler });
+          
+          // 点击外部关闭侧边栏
+          const clickOutsideHandler = (event) => this.handleClickOutside(event);
+          document.addEventListener('click', clickOutsideHandler);
+          this.listeners.push({ element: document, event: 'click', handler: clickOutsideHandler });
+          
+          // ESC键关闭侧边栏
+          const escKeyHandler = (event) => this.handleEscKey(event);
+          document.addEventListener('keydown', escKeyHandler);
+          this.listeners.push({ element: document, event: 'keydown', handler: escKeyHandler });
+          
+          // 响应式处理 - 使用节流优化
+          const resizeHandler = common.throttle(() => this.handleResize(), this.resizeThrottleTime);
+          window.addEventListener('resize', resizeHandler);
+          this.listeners.push({ element: window, event: 'resize', handler: resizeHandler });
+          
+          // 媒体查询变化事件
+          const mediaChangeHandler = (e) => {
+            // 小屏幕自动关闭侧边栏
+            if (e.matches && this.isOpen) {
+              this.toggleSidebar();
+            }
+          };
+          this.mediaQuery.addEventListener('change', mediaChangeHandler);
+          this.listeners.push({ element: this.mediaQuery, event: 'change', handler: mediaChangeHandler });
+        }
+        
+        // 切换侧边栏显示/隐藏
+        toggleSidebar() {
+          this.isOpen = !this.isOpen;
+          this.sidebar.classList.toggle('open', this.isOpen);
+          this.toggleBtn.setAttribute('aria-expanded', this.isOpen);
+          this.toggleBtn.setAttribute('aria-label', this.isOpen ? '关闭导航菜单' : '打开导航菜单');
+          
+          if (this.mainWrapper) {
+            this.mainWrapper.classList.toggle('sidebar-open', this.isOpen);
+          }
+          
+          // 添加过渡动画类
+          this.sidebar.classList.add('transitioning');
+          setTimeout(() => {
+            this.sidebar.classList.remove('transitioning');
+          }, 300); // 与CSS过渡时间匹配
+          
+          // 保存状态
+          this.saveState();
+        }
+        
+        // 点击外部关闭侧边栏
+        handleClickOutside(event) {
+          if (this.isOpen && 
+              !this.sidebar.contains(event.target) && 
+              !this.toggleBtn.contains(event.target)) {
+            this.toggleSidebar();
+          }
+        }
+        
+        // ESC键关闭侧边栏
+        handleEscKey(event) {
+          if (event.key === 'Escape' && this.isOpen) {
+            this.toggleSidebar();
+          }
+        }
+        
+        // 响应式处理
+        handleResize() {
+          if (window.innerWidth > 768 && this.isOpen) {
+            this.toggleSidebar();
+          }
+        }
+        
+        // 高亮当前页面
+        highlightCurrentPage() {
+          const currentPath = window.location.pathname;
+          const navLinks = document.querySelectorAll('.nav-list a');
+          
+          navLinks.forEach(link => {
+            try {
+              const linkPath = new URL(link.href).pathname;
+              if (currentPath === linkPath) {
+                link.classList.add('active');
+                // 展开包含当前链接的父菜单
+                let parentLi = link.closest('li');
+                while (parentLi) {
+                  parentLi.classList.add('expanded');
+                  parentLi = parentLi.parentElement.closest('li');
+                }
+              }
+            } catch (error) {
+              console.warn('处理链接时出错:', error);
+            }
+          });
+        }
+        
+        // 获取侧边栏状态
+        getSidebarState() {
+          return {
+            isOpen: this.isOpen,
+            windowWidth: window.innerWidth
+          };
+        }
+        
+        // 保存侧边栏状态到localStorage
+        saveState() {
+          try {
+            localStorage.setItem('sidebarState', JSON.stringify({
+              isOpen: this.isOpen
+            }));
+          } catch (error) {
+            console.warn('保存侧边栏状态失败:', error);
+          }
+        }
+        
+        // 销毁事件监听
+        destroy() {
+          // 移除所有事件监听器
+          this.listeners.forEach(({ element, event, handler }) => {
+            try {
+              element.removeEventListener(event, handler);
+            } catch (error) {
+              console.warn(`移除${event}事件监听器时出错:`, error);
+            }
+          });
+          
+          // 清空监听器数组
+          this.listeners = [];
+          
+          // 重置侧边栏状态
+          this.sidebar.classList.remove('open', 'transitioning');
+          if (this.mainWrapper) {
+            this.mainWrapper.classList.remove('sidebar-open');
+          }
+          
+          // 重置ARIA属性
+          this.toggleBtn.setAttribute('aria-expanded', 'false');
+          this.toggleBtn.setAttribute('aria-label', '打开导航菜单');
+        }
       }
+      
+      // 初始化侧边栏管理器
+      const sidebarManager = new SidebarManager();
+      
+      // 暴露到全局，便于调试或其他脚本使用
+      window.sidebarManager = sidebarManager;
+      
+      // 确保在页面卸载时清理资源
+      window.addEventListener('beforeunload', () => {
+        if (window.sidebarManager && window.sidebarManager.destroy) {
+          try {
+            window.sidebarManager.destroy();
+          } catch (error) {
+            console.warn('清理侧边栏管理器时出错:', error);
+          }
+        }
+      });
+    });
+  </script>
 
-      draw();
-    })();
+  <!-- 背景动画脚本 -->
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // 使用common.js中的工具函数（如果可用）
+      const common = window.common || {
+        // 降级方案：如果common.js不可用，使用内置的简单实现
+        throttle: function(func, limit) {
+          let inThrottle;
+          return function(...args) {
+            if (!inThrottle) {
+              func.apply(this, args);
+              inThrottle = true;
+              setTimeout(() => inThrottle = false, limit);
+            }
+          };
+        },
+        safeJsonParse: function(str, defaultValue = null) {
+          try {
+            return JSON.parse(str);
+          } catch (e) {
+            return defaultValue;
+          }
+        }
+      };
+      
+      // 背景动画类
+      class BackgroundAnimation {
+        constructor() {
+          this.canvas = document.getElementById('bgCanvas');
+          // 如果canvas不存在，则不初始化动画
+          if (!this.canvas) {
+            console.warn('背景画布未找到，跳过动画初始化');
+            this.isActive = false;
+            return;
+          }
+          
+          this.ctx = this.canvas.getContext('2d');
+          this.animationId = null;
+          this.mouseX = -100;
+          this.mouseY = -100;
+          this.rippleIntensity = 0;
+          this.time = 0;
+          
+          // 动画参数
+          this.amplitude = 1;
+          this.frequency = 0.005;
+          this.verticalSpacing = 10;
+          this.turbulenceAmplitude = 50;
+          this.rippleRadius = 100;
+          
+          // 性能优化参数
+          this.isActive = true;
+          this.throttleTime = 100; // 事件节流时间(ms)
+          this.listeners = []; // 用于跟踪所有事件监听器
+          
+          this.init();
+        }
+        
+        init() {
+          if (!this.isActive || !this.canvas) return;
+          
+          this.setupCanvas();
+          this.bindEvents();
+          this.startAnimation();
+        }
+        
+        setupCanvas() {
+          if (!this.canvas) return;
+          
+          this.resizeCanvas();
+          const resizeHandler = common.throttle(this.resizeCanvas.bind(this), this.throttleTime);
+          window.addEventListener('resize', resizeHandler);
+          this.listeners.push({ element: window, event: 'resize', handler: resizeHandler });
+        }
+        
+        resizeCanvas() {
+          if (!this.canvas) return;
+          
+          try {
+            this.canvas.width = window.innerWidth;
+            this.canvas.height = window.innerHeight;
+          } catch (error) {
+            console.warn('调整画布大小时出错:', error);
+            // 如果调整大小失败，可能是因为画布已被移除，此时应该销毁动画
+            this.destroy();
+          }
+        }
+        
+        bindEvents() {
+          if (!this.isActive) return;
+          
+          // 鼠标移动事件 - 节流处理
+          const mouseMoveHandler = common.throttle((e) => {
+            this.mouseX = e.clientX;
+            this.mouseY = e.clientY;
+            this.rippleIntensity = 8;
+          }, 20);
+          window.addEventListener('mousemove', mouseMoveHandler);
+          this.listeners.push({ element: window, event: 'mousemove', handler: mouseMoveHandler });
+          
+          // 页面可见性变化 - 暂停/恢复动画
+          const visibilityChangeHandler = () => {
+            if (document.hidden) {
+              this.pauseAnimation();
+            } else {
+              this.resumeAnimation();
+            }
+          };
+          document.addEventListener('visibilitychange', visibilityChangeHandler);
+          this.listeners.push({ element: document, event: 'visibilitychange', handler: visibilityChangeHandler });
+          
+          // 窗口失焦/聚焦 - 暂停/恢复动画
+          const blurHandler = () => this.pauseAnimation();
+          const focusHandler = () => this.resumeAnimation();
+          window.addEventListener('blur', blurHandler);
+          window.addEventListener('focus', focusHandler);
+          this.listeners.push({ element: window, event: 'blur', handler: blurHandler });
+          this.listeners.push({ element: window, event: 'focus', handler: focusHandler });
+        }
+        
+        // 简单湍流函数，产生混沌扰动
+        turbulence(x, y, t) {
+          return (Math.sin(x * 0.01 + t * 0.1) + Math.sin(y * 0.02 + t * 0.1)) / 2 * this.turbulenceAmplitude;
+        }
+        
+        draw() {
+          if (!this.isActive || !this.canvas) return;
+          
+          try {
+            this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+            
+            // 使用 "lighter" 模式使颜色混合
+            this.ctx.globalCompositeOperation = 'lighter';
+            
+            // 遍历每条水平线
+            for (let y = 0; y < this.canvas.height; y += this.verticalSpacing) {
+              this.ctx.beginPath();
+              
+              // 创建一个沿水平线的多色线性渐变
+              let grad = this.ctx.createLinearGradient(0, y, this.canvas.width, y);
+              grad.addColorStop(0, `hsl(${(this.time + y * 0.1) % 360}, 80%, 50%)`);
+              grad.addColorStop(0.5, `hsl(${(this.time + y * 0.1 + 60) % 360}, 80%, 50%)`);
+              grad.addColorStop(1, `hsl(${(this.time + y * 0.1 + 120) % 360}, 80%, 50%)`);
+              this.ctx.strokeStyle = grad;
+              
+              // 绘制波纹线
+              for (let x = 0; x <= this.canvas.width; x++) {
+                let baseOffset = Math.sin(x * this.frequency + this.time + y * 0.005) * this.amplitude;
+                let turb = this.turbulence(x, y, this.time);
+                
+                // 计算鼠标局部扰动效果
+                const dx = x - this.mouseX;
+                const dy = y - this.mouseY;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                let ripple = 0;
+                
+                if (dist < this.rippleRadius) {
+                  let decay = 1 - dist / this.rippleRadius;
+                  ripple = decay * this.rippleIntensity * Math.sin(x * 0.05 + this.time * 0.2);
+                }
+                
+                let offset = baseOffset + turb + ripple;
+                if (x === 0) {
+                  this.ctx.moveTo(x, y + offset);
+                } else {
+                  this.ctx.lineTo(x, y + offset);
+                }
+              }
+              
+              this.ctx.lineWidth = 1;
+              this.ctx.stroke();
+            }
+            
+            // 恢复默认合成模式
+            this.ctx.globalCompositeOperation = 'source-over';
+            
+            // 叠加水平渐变遮罩：左侧完全透明，右侧50%不透明
+            this.ctx.save();
+            this.ctx.globalCompositeOperation = 'destination-in';
+            let mask = this.ctx.createLinearGradient(0, 0, this.canvas.width, 0);
+            mask.addColorStop(0, 'rgba(0,0,0,0)');       // 左侧：全透明
+            mask.addColorStop(1, 'rgba(0,0,0,0.25)');     // 右侧：50%不透明
+            this.ctx.fillStyle = mask;
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            this.ctx.restore();
+            
+            // 衰减鼠标扰动强度，使扰动逐渐消失
+            this.rippleIntensity *= 0.98;
+            
+            this.time += 0.02;  // 平缓时间步长
+            this.animationId = requestAnimationFrame(() => this.draw());
+          } catch (error) {
+            console.error('绘制背景动画时出错:', error);
+            // 发生错误时停止动画
+            this.destroy();
+          }
+        }
+        
+        startAnimation() {
+          if (!this.isActive || !this.canvas) return;
+          
+          this.isActive = true;
+          if (!this.animationId) {
+            this.draw();
+          }
+        }
+        
+        pauseAnimation() {
+          this.isActive = false;
+          if (this.animationId) {
+            try {
+              cancelAnimationFrame(this.animationId);
+              this.animationId = null;
+            } catch (error) {
+              console.warn('暂停动画时出错:', error);
+            }
+          }
+        }
+        
+        resumeAnimation() {
+          this.startAnimation();
+        }
+        
+        // 销毁动画
+        destroy() {
+          // 暂停动画
+          this.pauseAnimation();
+          
+          // 移除所有事件监听器
+          this.listeners.forEach(({ element, event, handler }) => {
+            try {
+              element.removeEventListener(event, handler);
+            } catch (error) {
+              console.warn(`移除${event}事件监听器时出错:`, error);
+            }
+          });
+          
+          // 清空监听器数组
+          this.listeners = [];
+          
+          // 重置状态
+          this.isActive = false;
+          this.time = 0;
+          this.rippleIntensity = 0;
+          
+          // 清理画布
+          if (this.canvas && this.ctx) {
+            try {
+              this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+            } catch (error) {
+              console.warn('清理画布时出错:', error);
+            }
+          }
+        }
+      }
+      
+      // 初始化背景动画
+      const bgAnimation = new BackgroundAnimation();
+      
+      // 暴露到全局，便于调试或其他脚本使用
+      window.bgAnimation = bgAnimation;
+      
+      // 确保在页面卸载时清理资源
+      window.addEventListener('beforeunload', () => {
+        if (window.bgAnimation && window.bgAnimation.destroy) {
+          try {
+            window.bgAnimation.destroy();
+          } catch (error) {
+            console.warn('清理背景动画时出错:', error);
+          }
+        }
+      });
+    });
   </script>
 </body>
 </html>

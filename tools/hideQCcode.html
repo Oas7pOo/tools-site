@@ -23,17 +23,61 @@ header_description: 上传图片和二维码图片，生成伪装后的文件。
     <canvas id="canvas"></canvas>
 </div>
 
+<script src="../js/common.js"></script>
+<script>
+    // common对象降级处理
+    if (typeof window.common === 'undefined') {
+        window.common = {
+            showLoadingIndicator: function(button) {
+                if (button) {
+                    const originalText = button.innerText;
+                    button.disabled = true;
+                    return originalText;
+                }
+                return '';
+            },
+            hideLoadingIndicator: function(button, originalText) {
+                if (button) {
+                    button.disabled = false;
+                    button.innerText = originalText;
+                }
+            },
+            showNotification: function(message, type) {
+                // 降级为alert
+                alert(message);
+            },
+            downloadFile: function(blob, filename) {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => {
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                }, 100);
+            }
+        };
+    }
+</script>
+
 <script>
 document.getElementById('combineButton').addEventListener('click', async () => {
+    const button = document.getElementById('combineButton');
+    const originalText = common.showLoadingIndicator(button);
   const topImageFile = document.getElementById('topImageInput').files[0];
   const hiddenImageFile = document.getElementById('hiddenImageInput').files[0];
 
   if (!topImageFile || !hiddenImageFile) {
-    alert('请上传上层和下层图片');
+    common.showNotification('请上传上层和下层图片', 'warning');
+    common.hideLoadingIndicator(button, originalText);
     return;
   }
 
   try {
+    common.showNotification('正在处理图片，请稍候...', 'info');
+    
     // 加载图像
     const [topImg, hiddenImg] = await Promise.all([
       loadImage(topImageFile),
@@ -119,28 +163,44 @@ document.getElementById('combineButton').addEventListener('click', async () => {
 
     // 自动下载
     canvas.toBlob(blob => {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `隐藏二维码-${Date.now()}.png`;
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => {
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      }, 100);
+      try {
+        const filename = `隐藏二维码-${Date.now()}.png`;
+        common.downloadFile(blob, filename);
+        common.showNotification('图片合成成功，已开始下载', 'success');
+      } catch (downloadError) {
+        common.showNotification('下载失败: ' + downloadError.message, 'error');
+      } finally {
+        common.hideLoadingIndicator(button, originalText);
+      }
     }, 'image/png');
 
   } catch (error) {
-    alert('生成失败: ' + error.message);
+    common.showNotification('生成失败: ' + error.message, 'error');
+    common.hideLoadingIndicator(button, originalText);
   }
 
   // 图像加载函数
   function loadImage(file) {
     return new Promise((resolve, reject) => {
       const img = new Image();
-      img.onload = () => resolve(img);
-      img.onerror = reject;
+      img.onload = () => {
+        // 释放URL对象
+        try {
+          URL.revokeObjectURL(img.src);
+        } catch (e) {
+          // 忽略清理失败的错误
+        }
+        resolve(img);
+      };
+      img.onerror = function() {
+        // 释放URL对象
+        try {
+          URL.revokeObjectURL(img.src);
+        } catch (e) {
+          // 忽略清理失败的错误
+        }
+        reject(new Error('图片加载失败'));
+      };
       img.src = URL.createObjectURL(file);
     });
   }

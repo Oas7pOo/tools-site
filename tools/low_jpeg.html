@@ -1,0 +1,66 @@
+---
+layout: default
+title: 低质压缩图生成器 - 冰兔的工具站
+header_title: 低质压缩图生成器
+header_description: 上传图片，一键生成色彩失真的压缩风格图像，可用于艺术或Web Glitch美术设计
+---
+
+<h2>图像压缩 - 彩色断层风</h2>
+<p>上传任意图片，压缩为极低质量 JPEG 图像，形成独特的马赛克伪影与色彩错位美感。</p>
+
+<div class="container">
+  <input type="file" id="imageInput" accept="image/*">
+  <br><br>
+  <button onclick="compressImage()">压缩并生成预览</button>
+  <br><br>
+  <canvas id="previewCanvas" style="display:none; max-width:100%; height:auto; border:1px solid #ccc;"></canvas>
+  <br>
+  <button id="downloadBtn" style="display:none;">下载压缩图像</button>
+</div>
+
+<script>
+function compressImage() {
+  const fileInput = document.getElementById('imageInput');
+  const canvas = document.getElementById('previewCanvas');
+  const downloadBtn = document.getElementById('downloadBtn');
+
+  if (!fileInput.files || fileInput.files.length === 0) {
+    alert('请先选择一张图片');
+    return;
+  }
+
+  const file = fileInput.files[0];
+  const img = new Image();
+  const reader = new FileReader();
+
+  reader.onload = function (e) {
+    img.onload = function () {
+      const ctx = canvas.getContext('2d');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      ctx.drawImage(img, 0, 0);
+
+      const compressedDataURL = canvas.toDataURL('image/jpeg', 0.03);
+      const compressedImg = new Image();
+      compressedImg.src = compressedDataURL;
+
+      compressedImg.onload = function () {
+        canvas.width = compressedImg.width;
+        canvas.height = compressedImg.height;
+        ctx.drawImage(compressedImg, 0, 0);
+        canvas.style.display = 'block';
+
+        downloadBtn.onclick = function () {
+          const a = document.createElement('a');
+          a.href = compressedDataURL;
+          a.download = 'compressed-glitch.jpg';
+          a.click();
+        };
+        downloadBtn.style.display = 'inline-block';
+      };
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+</script>

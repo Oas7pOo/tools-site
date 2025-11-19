@@ -36,12 +36,67 @@ header_description: 将文本（中英符号均可）转为01二进制字符串�
     <textarea id="textOutput" rows="4" style="width: 100%;" readonly></textarea>
 </div>
 
+<!-- 通用工具函数 -->
+<script src="../js/common.js"></script>
+<script>
+    // common对象降级处理
+    if (typeof window.common === 'undefined') {
+        window.common = {
+            showLoadingIndicator: function(button) {
+                if (button) {
+                    const originalText = button.innerText;
+                    button.disabled = true;
+                    return originalText;
+                }
+                return '';
+            },
+            hideLoadingIndicator: function(button, originalText) {
+                if (button) {
+                    button.disabled = false;
+                    button.innerText = originalText;
+                }
+            },
+            showNotification: function(message, type) {
+                // 降级为alert
+                alert(message);
+            }
+        };
+    }
+</script>
 <!-- JsBarcode 条码生成库 -->
 <script src="../js/JsBarcode.all.min.js"></script>
 <!-- ZXing-js 条码识别库 -->
 <script src="../js/zxing-js.umd.min.js"></script>
-//https://unpkg.com/@zxing/library@latest/umd/index.min.js
 <script>
+// 降级处理：确保common对象存在
+if (typeof window.common === 'undefined') {
+    window.common = {
+        showNotification: function(message, type) {
+            type = type || 'info';
+            console.log('[' + type + ']', message);
+            alert(message);
+        },
+        showLoadingIndicator: function(button) {
+            if (button) {
+                button.disabled = true;
+                const originalText = button.innerText;
+                button.setAttribute('data-original-text', originalText);
+                button.innerText = '处理中...';
+                return originalText;
+            }
+            return '';
+        },
+        hideLoadingIndicator: function(button, originalText) {
+            if (button) {
+                button.disabled = false;
+                if (originalText) {
+                    button.innerText = originalText;
+                }
+            }
+        }
+    };
+}
+
 // 文本转01字符串
 window.convertToBin = function() {
     const text = document.getElementById('txtInput').value;
@@ -49,13 +104,18 @@ window.convertToBin = function() {
         document.getElementById('binOutput').value = '';
         return;
     }
-    const encoder = new TextEncoder();
-    const bytes = encoder.encode(text);
-    let arr = [];
-    for (let byte of bytes) {
-        arr.push(byte.toString(2).padStart(8, '0'));
+    
+    try {
+        const encoder = new TextEncoder();
+        const bytes = encoder.encode(text);
+        let arr = [];
+        for (let byte of bytes) {
+            arr.push(byte.toString(2).padStart(8, '0'));
+        }
+        document.getElementById('binOutput').value = arr.join(' ');
+    } catch (e) {
+        common.showNotification('转换失败: ' + e.message, 'error');
     }
-    document.getElementById('binOutput').value = arr.join(' ');
 }
 
 // 二进制字符串 → Base64
@@ -88,23 +148,29 @@ function base64ToBin(base64) {
 
 // 用原始文本生成条形码（内容为Base64，底部显示原文）并支持PNG下载
 window.showBarcodeFromText = function() {
-    const text = document.getElementById('txtInput').value;
-    const svg = document.getElementById('barcodeSvg');
-    const canvas = document.getElementById('barcodeCanvas');
-    const downloadBtn = document.getElementById('downloadBarcodeBtn');
-    if (!text) {
-        svg.innerHTML = '';
-        downloadBtn.style.display = 'none';
-        return;
-    }
-    // 转成01，再Base64压缩
-    const encoder = new TextEncoder();
-    const bytes = encoder.encode(text);
-    let binStr = '';
-    for (let byte of bytes) binStr += byte.toString(2).padStart(8, '0');
-    let base64 = binToBase64(binStr);
-
+    const button = document.querySelector('button[onclick="showBarcodeFromText()"]');
+    const originalText = common.showLoadingIndicator(button);
+    
     try {
+        const text = document.getElementById('txtInput').value;
+        const svg = document.getElementById('barcodeSvg');
+        const canvas = document.getElementById('barcodeCanvas');
+        const downloadBtn = document.getElementById('downloadBarcodeBtn');
+        
+        if (!text) {
+            svg.innerHTML = '';
+            downloadBtn.style.display = 'none';
+            common.showNotification('请先输入文本内容', 'warning');
+            return;
+        }
+        
+        // 转成01，再Base64压缩
+        const encoder = new TextEncoder();
+        const bytes = encoder.encode(text);
+        let binStr = '';
+        for (let byte of bytes) binStr += byte.toString(2).padStart(8, '0');
+        let base64 = binToBase64(binStr);
+
         // 绘制到SVG
         JsBarcode(svg, base64, {
             format: "CODE128",
@@ -117,6 +183,7 @@ window.showBarcodeFromText = function() {
             textMargin: 8,
             margin: 10,
         });
+        
         // SVG转Canvas再转PNG，供下载
         const xml = new XMLSerializer().serializeToString(svg);
         const DOMURL = window.URL || window.webkitURL || window;
@@ -125,68 +192,106 @@ window.showBarcodeFromText = function() {
         const url = DOMURL.createObjectURL(svgBlob);
 
         img.onload = function() {
-            canvas.width = img.width;
-            canvas.height = img.height;
-            const ctx = canvas.getContext('2d');
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(img, 0, 0);
-            // 生成PNG并绑定下载
-            canvas.toBlob(function(blob) {
-                downloadBtn.style.display = '';
-                downloadBtn.onclick = function() {
-                    const a = document.createElement('a');
-                    const url2 = URL.createObjectURL(blob);
-                    a.href = url2;
-                    a.download = 'barcode.png';
-                    a.click();
-                    setTimeout(()=>URL.revokeObjectURL(url2), 2000);
-                };
-            });
-            DOMURL.revokeObjectURL(url);
+            try {
+                canvas.width = img.width;
+                canvas.height = img.height;
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0);
+                
+                // 生成PNG并绑定下载
+                canvas.toBlob(function(blob) {
+                    downloadBtn.style.display = '';
+                    downloadBtn.onclick = function() {
+                        // 优先使用common.js的downloadFile函数
+                        if (typeof common.downloadFile === 'function') {
+                            common.downloadFile(blob, 'barcode.png', 'image/png');
+                        } else {
+                            // 降级方案
+                            const a = document.createElement('a');
+                            const url2 = URL.createObjectURL(blob);
+                            a.href = url2;
+                            a.download = 'barcode.png';
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            setTimeout(()=>URL.revokeObjectURL(url2), 2000);
+                        }
+                    };
+                    common.hideLoadingIndicator(button, originalText);
+                });
+                DOMURL.revokeObjectURL(url);
+            } catch (e) {
+                common.showNotification('条形码渲染失败: ' + e.message, 'error');
+                common.hideLoadingIndicator(button, originalText);
+            }
         };
+        
         img.onerror = function() {
+            common.showNotification('图片加载失败', 'error');
             downloadBtn.style.display = 'none';
+            common.hideLoadingIndicator(button, originalText);
         };
+        
         img.src = url;
     } catch (e) {
         svg.innerHTML = '<text x="10" y="40" fill="red">条形码生成失败</text>';
         downloadBtn.style.display = 'none';
+        common.showNotification('条形码生成失败: ' + e.message, 'error');
+        common.hideLoadingIndicator(button, originalText);
     }
 }
 
 // 01字符串/Base64 → 原文
 window.convertInputToText = function() {
-    let input = document.getElementById('inputArea').value.trim();
-    let output = '';
-    const out = document.getElementById('textOutput');
-    if (!input) {
-        out.value = '';
-        return;
-    }
-    // 先判断是不是01串
-    let binStr = '';
-    if (/^[01\s]+$/.test(input) && input.replace(/\s/g,'').length % 8 === 0) {
-        // 01字符串
-        binStr = input.replace(/\s+/g, '');
-    } else {
-        // 尝试Base64
-        binStr = base64ToBin(input);
-        if (!binStr) {
-            out.value = '输入内容格式不正确，无法还原。';
+    const button = document.querySelector('button[onclick="convertInputToText()"]');
+    const originalText = common.showLoadingIndicator(button);
+    
+    try {
+        let input = document.getElementById('inputArea').value.trim();
+        const out = document.getElementById('textOutput');
+        
+        if (!input) {
+            out.value = '';
+            common.hideLoadingIndicator(button, originalText);
             return;
         }
-    }
-    try {
-        let bytes = [];
-        for (let i = 0; i < binStr.length; i += 8) {
-            bytes.push(parseInt(binStr.substr(i, 8), 2));
+        
+        // 先判断是不是01串
+        let binStr = '';
+        if (/^[01\s]+$/.test(input) && input.replace(/\s/g,'').length % 8 === 0) {
+            // 01字符串
+            binStr = input.replace(/\s+/g, '');
+        } else {
+            // 尝试Base64
+            binStr = base64ToBin(input);
+            if (!binStr) {
+                out.value = '输入内容格式不正确，无法还原。';
+                common.showNotification('输入内容格式不正确，无法还原。', 'warning');
+                common.hideLoadingIndicator(button, originalText);
+                return;
+            }
         }
-        const arr = new Uint8Array(bytes);
-        const decoder = new TextDecoder();
-        output = decoder.decode(arr);
-        out.value = output;
+        
+        try {
+            let bytes = [];
+            for (let i = 0; i < binStr.length; i += 8) {
+                bytes.push(parseInt(binStr.substr(i, 8), 2));
+            }
+            const arr = new Uint8Array(bytes);
+            const decoder = new TextDecoder();
+            const output = decoder.decode(arr);
+            out.value = output;
+            common.showNotification('解码成功', 'success');
+        } catch (e) {
+            out.value = '解码失败：输入内容可能有误。';
+            common.showNotification('解码失败：输入内容可能有误。', 'error');
+        }
     } catch (e) {
-        out.value = '解码失败：输入内容可能有误。';
+        document.getElementById('textOutput').value = '处理过程中发生错误。';
+        common.showNotification('处理过程中发生错误：' + e.message, 'error');
+    } finally {
+        common.hideLoadingIndicator(button, originalText);
     }
 }
 
@@ -195,35 +300,76 @@ window.decodeBarcodeImage = function() {
     const input = document.getElementById('imageInput');
     const out = document.getElementById('textOutput');
     out.value = '';
-    if (!input.files.length) {
-        alert("请上传图片");
-        return;
-    }
-    const file = input.files[0];
-    const imgURL = URL.createObjectURL(file);
-    const img = new window.Image();
-    img.onload = function() {
-        const codeReader = new ZXing.BrowserBarcodeReader();
-        codeReader.decodeFromImageElement(img).then(result => {
-            let codeText = result.text.trim();
-            // 先尝试base64方式还原
-            let originText = tryBase64ToUtf8(codeText);
-            if (originText !== null) {
-                out.value = originText;
-            } else if (/^[01\s]+$/.test(codeText) && codeText.replace(/\s/g,'').length % 8 === 0) {
-                // 若条码内容为 01串，则先转byte再转文本
-                out.value = binToText(codeText);
-            } else {
-                out.value = codeText; // 直接输出
+    
+    // 获取调用此函数的按钮
+    const button = document.querySelector('button[onclick="decodeBarcodeImage()"]');
+    const originalText = common.showLoadingIndicator(button);
+    
+    try {
+        if (!input.files.length) {
+            common.showNotification('请上传图片', 'warning');
+            common.hideLoadingIndicator(button, originalText);
+            return;
+        }
+        
+        const file = input.files[0];
+        const imgURL = URL.createObjectURL(file);
+        const img = new window.Image();
+        
+        img.onload = function() {
+            try {
+                const codeReader = new ZXing.BrowserBarcodeReader();
+                codeReader.decodeFromImageElement(img).then(result => {
+                    try {
+                        let codeText = result.text.trim();
+                        // 先尝试base64方式还原
+                        let originText = tryBase64ToUtf8(codeText);
+                        if (originText !== null) {
+                            out.value = originText;
+                            common.showNotification('条码解码成功', 'success');
+                        } else if (/^[01\s]+$/.test(codeText) && codeText.replace(/\s/g,'').length % 8 === 0) {
+                            // 若条码内容为 01串，则先转byte再转文本
+                            out.value = binToText(codeText);
+                            common.showNotification('条码解码成功', 'success');
+                        } else {
+                            out.value = codeText; // 直接输出
+                            common.showNotification('条码识别成功，内容已显示', 'success');
+                        }
+                    } catch (e) {
+                        out.value = "处理条码内容时发生错误。";
+                        common.showNotification('处理条码内容时发生错误：' + e.message, 'error');
+                    } finally {
+                        // 释放资源
+                        URL.revokeObjectURL(imgURL);
+                        common.hideLoadingIndicator(button, originalText);
+                    }
+                }).catch(err => {
+                    out.value = "条码识别失败：" + (err && err.message ? err.message : err);
+                    common.showNotification('条码识别失败：' + (err && err.message ? err.message : err), 'error');
+                    URL.revokeObjectURL(imgURL);
+                    common.hideLoadingIndicator(button, originalText);
+                });
+            } catch (e) {
+                out.value = "条码识别过程中发生错误。";
+                common.showNotification('条码识别过程中发生错误：' + e.message, 'error');
+                URL.revokeObjectURL(imgURL);
+                common.hideLoadingIndicator(button, originalText);
             }
-        }).catch(err => {
-            out.value = "条码识别失败：" + (err && err.message ? err.message : err);
-        });
-    };
-    img.onerror = function() {
-        out.value = "图片加载失败。";
-    };
-    img.src = imgURL;
+        };
+        
+        img.onerror = function() {
+            out.value = "图片加载失败。";
+            common.showNotification('图片加载失败', 'error');
+            URL.revokeObjectURL(imgURL);
+            common.hideLoadingIndicator(button, originalText);
+        };
+        
+        img.src = imgURL;
+    } catch (e) {
+        out.value = "处理过程中发生错误。";
+        common.showNotification('处理过程中发生错误：' + e.message, 'error');
+        common.hideLoadingIndicator(button, originalText);
+    }
 };
 // base64解码为utf8文本，解码失败则返回null
 function tryBase64ToUtf8(base64) {

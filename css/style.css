@@ -5,12 +5,22 @@
   box-sizing: border-box;
 }
 
+/* 全屏 canvas 固定于背景 */
+#bgCanvas {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+}
+
 html, body {
   height: 100%;
 }
 
 body {
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: 'Microsoft YaHei', '微软雅黑', Arial, Helvetica, sans-serif;
   line-height: 2;
   background-color: #f0f0f0;
   color: #333;
@@ -30,11 +40,16 @@ footer p {
 
 /* 主内容区域整体容器 */
 .main-wrapper {
-  margin-left: 260px;
-  width: calc(100% - 260px);
+  margin-left: 240px;
+  width: calc(100% - 240px);
   min-height: 100vh;      /* 设置最小高度为视窗高度 */
   display: flex;          /* 关键 */
   flex-direction: column; /* 关键：竖直排列header、content、footer */
+}
+
+/* 菜单展开状态样式 */
+li.expanded > .sub-nav {
+  display: block;
 }
 
 /* 外层容器 */
@@ -48,7 +63,8 @@ footer p {
   width: 240px;
   background-color: #333;
   color: #fff;
-  min-height: 100vh;
+  height: 100vh;
+  max-height: 100vh;
   padding: 20px;
   position: fixed;
   top: 0;
@@ -56,6 +72,8 @@ footer p {
   overflow-y: auto;
   transition: transform 0.3s ease; /* 动画过渡 */
   transform: translateX(0);       /* 桌面端保持不动 */
+  /* 确保在所有情况下都能正常滚动 */
+  -webkit-overflow-scrolling: touch; /* iOS滚动优化 */
 }
 
 /* 顶级导航样式 */
@@ -112,11 +130,12 @@ a.active {
 
 /* 主内容区域 */
 .content {
-  margin-right: 260px;
-  margin：20 px auto;
+  margin: 20px auto;
   padding: 20px;
   flex: 1;
   background-color: rgba(255, 255, 255, 0.5);
+  max-width: 1000px;
+  width: 90%;
 }
 
 .container {
@@ -139,27 +158,72 @@ input[type="file"] {
   border-radius: 4px;
 }
 
+/* 全局按钮样式 */
 button {
-  display: block;
-  padding: 12px;
-  margin-top: 15px;
-  background: #007bff;
+  cursor: pointer;
+  background-color: #007bff;
   color: white;
   border: none;
+  padding: 8px 16px;
   border-radius: 4px;
-  cursor: pointer;
-  transition: background 0.3s;
+  transition: all 0.3s ease;
+  font-family: inherit;
+  font-size: 14px;
+  outline: none;
 }
 
-button:hover {
-  background: #0056b3;
+button:hover:not(:disabled) {
+  background-color: #0056b3;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-/* 禁用状态时的样式 */
+button:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
 button:disabled {
-  opacity: 0.5;
+  background-color: #ccc;
   cursor: not-allowed;
-  background: #ccc !important; /* 可选：改变背景色 */
+  opacity: 0.6;
+}
+
+/* 按钮加载状态样式 */
+button.loading {
+  position: relative;
+  color: transparent;
+}
+
+button.loading::after {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  top: 50%;
+  left: 50%;
+  margin-top: -8px;
+  margin-left: -8px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: white;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 防重复点击按钮专用样式 */
+.disable-on-click {
+  position: relative;
+  overflow: hidden;
+}
+
+.disable-on-click.loading {
+  background-color: #0056b3 !important;
 }
 
 /* 正文多栏容器（仅针对正文内容） */
@@ -228,13 +292,15 @@ footer {
   transition: width 0.4s ease;
 }
 
-/* 主样式：让按钮固定在左上角 */
+/* 汉堡按钮样式 - 固定在左上角 */
 .hamburger-btn {
   position: fixed;
   top: 15px;
   left: 15px;
   z-index: 9999;
-
+  
+  display: none; /* 默认隐藏，仅在小屏时显示 */
+  
   font-size: 24px;
   background: #333;
   color: #fff;
@@ -242,9 +308,22 @@ footer {
   cursor: pointer;
   padding: 8px 12px;
   border-radius: 4px;
+  transition: all 0.3s ease;
+  
+  /* 防止文字选择 */
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
 
-  /* 如需默认隐藏，仅在小屏时显示，可用： */
-  /* display: none; */
+.hamburger-btn:hover {
+  background: #555;
+  transform: scale(1.05);
+}
+
+.hamburger-btn:active {
+  transform: scale(0.95);
 }
 
 /* 响应式调整：屏幕宽度较小时，导航栏显示在顶部 */
@@ -260,32 +339,27 @@ footer {
     left: 0;
     transform: translateX(-100%); /* 默认向左移出屏幕 */
     z-index: 9998;
+    transition: transform 0.3s ease;
   }
   .sidebar.open {
     transform: translateX(0);     /* 当有 .open 类时滑出屏幕 */
   }
-   /* 可选：隐藏桌面端 margin-left 给 footer 正文等 */
+  /* 侧边栏过渡动画效果 */
+  .sidebar.transitioning {
+    transition: transform 0.3s ease;
+  }
+  /* 隐藏桌面端 margin-left */
   .content {
     margin-left: 0;
     margin-right: 0;
+    padding: 15px;
   }
   .main-wrapper {
     margin-left: 0;
     width: 100%;
   }
-  /* 汉堡按钮样式 */
+  /* 在小屏幕上显示汉堡按钮 */
   .hamburger-btn {
-    position: fixed;
-    top: 15px;
-    left: 15px;
-    z-index: 9999;
-    font-size: 24px;
-    background: #333;
-    color: #fff;
-    border: none;
-    cursor: pointer;
-    padding: 8px 12px;
-    border-radius: 4px;
-    display: block;  /* 小屏显示按钮 */
+    display: block;
   }
 }
