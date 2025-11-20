@@ -28,15 +28,10 @@
   margin-bottom: 6px;
 }
 
-.drive-current-file {
-  font-size: 1rem;
-  font-weight: 600;
-  color: #111827; /* 深色标题 */
-}
-
+/* 只保留目录（面包屑），隐藏“当前文件名”和“当前路径” */
+.drive-current-file,
 .drive-current-path {
-  font-size: 0.8rem;
-  color: #6b7280; /* 灰色路径 */
+  display: none;
 }
 
 .drive-viewer-actions {
@@ -139,24 +134,23 @@
   color: #6b7280;
 }
 
-/* 预览区域
-   默认完全隐藏（只在点击文件、进入 preview-only 时出现） */
+/* 预览区域：默认完全隐藏 */
 .drive-viewer-body {
-  display: none;        /* ⬅ 关键：初始不显示预览区 */
-  flex: 1 1 auto;
+  display: none;          /* 进页面时不显示预览区 */
+  height: 0;              /* 没有高度，避免撑开 */
+  flex: 0 0 auto;
   margin-top: 12px;
   border-radius: 6px;
   overflow: hidden;
-  background: #ffffff;  /* 预览区域用白底，不再是大块灰色 */
+  background: #ffffff;
   border: 1px solid rgba(15,23,42,0.08);
   position: relative;
-  min-height: 0;
 }
 
-/* iframe 本身仍占满预览区域 */
+/* 预览 iframe 本身占满整个预览区域 */
 .drive-preview-frame {
   width: 100%;
-  height: 100%;
+  height: 100%;           /* 有了父元素的 height，这个才生效 */
   border: none;
 }
 
@@ -184,9 +178,10 @@
   display: none;
 }
 
+/* “只预览模式”：此时才给预览区域实际高度，让 pdf 占满 */
 .drive-explorer-main.preview-only .drive-viewer-body {
-  display: block;       /* ⬅ 点击文件后才显示预览区 */
-  min-height: 70vh;
+  display: block;
+  height: 70vh;           /* 你可以根据喜好改成 65vh / 80vh 等 */
 }
 
 /* 加载提示文字 */
