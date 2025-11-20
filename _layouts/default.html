@@ -113,7 +113,7 @@
   <script>
     document.addEventListener('DOMContentLoaded', function() {
       // 使用common.js中的工具函数（如果可用）
-      const utils = window.common || {
+      const common = window.common || {
         // 降级方案：如果common.js不可用，使用内置的简单实现
         showLoadingIndicator: function(button) {
           const originalText = button.innerText;
