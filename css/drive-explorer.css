@@ -1,4 +1,4 @@
-/* Drive Explorer - 单列网盘风样式 */
+/* Drive Explorer - 单列网盘风样式（去掉灰底，只在预览时显示预览区） */
 
 /* 外层容器，占满 default.html 的 content 宽度 */
 .drive-explorer-container {
@@ -6,16 +6,17 @@
   min-height: 70vh;
 }
 
-/* 主区域：标题 + 按钮 + 面包屑 + 文件网格 + 预览 */
+/* 主区域：标题 + 按钮 + 面包屑 + 文件网格 + 预览
+   去掉原来的浅灰背景和白字，改用默认白底 + 深色文字 */
 .drive-explorer-main {
-  background: rgba(0,0,0,0.18);
-  border-radius: 8px;
-  padding: 10px 12px;
-  border: 1px solid rgba(255,255,255,0.14);
+  background: transparent;
+  border-radius: 0;
+  padding: 0 0 10px;
+  border: none;
   display: flex;
   flex-direction: column;
   min-height: 60vh;
-  color: #fff;
+  color: inherit; /* 跟随站点默认文字颜色 */
 }
 
 /* 顶部标题与按钮区 */
@@ -30,11 +31,12 @@
 .drive-current-file {
   font-size: 1rem;
   font-weight: 600;
+  color: #111827; /* 深色标题 */
 }
 
 .drive-current-path {
   font-size: 0.8rem;
-  color: #ccc;
+  color: #6b7280; /* 灰色路径 */
 }
 
 .drive-viewer-actions {
@@ -43,6 +45,7 @@
   flex-shrink: 0;
 }
 
+/* 顶部按钮保持蓝色，白字没问题 */
 .drive-btn {
   display: inline-flex;
   align-items: center;
@@ -68,7 +71,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 2px;
-  color: #ddd;
+  color: #6b7280;
 }
 
 .drive-breadcrumb .breadcrumb-item {
@@ -78,7 +81,7 @@
 .drive-breadcrumb .breadcrumb-item.active {
   cursor: default;
   font-weight: 600;
-  color: #fff;
+  color: #111827;
 }
 
 .drive-breadcrumb .breadcrumb-separator {
@@ -91,7 +94,7 @@
   flex: 0 0 auto;
   margin-top: 4px;
   padding-top: 4px;
-  border-top: 1px solid rgba(255,255,255,0.08);
+  border-top: 1px solid rgba(15,23,42,0.08);
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: 10px;
@@ -101,16 +104,17 @@
 
 .drive-item {
   border-radius: 6px;
-  border: 1px solid rgba(255,255,255,0.14);
+  border: 1px solid rgba(15,23,42,0.08);
   padding: 8px 6px;
   display: flex;
   flex-direction: column;
   gap: 4px;
   cursor: pointer;
+  background: #ffffff;
 }
 
 .drive-item:hover {
-  background: rgba(255,255,255,0.08);
+  background: #f3f4f6;
 }
 
 .drive-item-icon {
@@ -122,29 +126,34 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  color: #111827;
 }
 
 .drive-item-meta {
   font-size: 0.75rem;
-  color: #ccc;
+  color: #6b7280;
 }
 
 .drive-empty {
   font-size: 0.82rem;
-  color: #ccc;
+  color: #6b7280;
 }
 
-/* 预览区域（默认下面一大块） */
+/* 预览区域
+   默认完全隐藏（只在点击文件、进入 preview-only 时出现） */
 .drive-viewer-body {
+  display: none;        /* ⬅ 关键：初始不显示预览区 */
   flex: 1 1 auto;
-  margin-top: 8px;
+  margin-top: 12px;
   border-radius: 6px;
   overflow: hidden;
-  background: rgba(0,0,0,0.25);
+  background: #ffffff;  /* 预览区域用白底，不再是大块灰色 */
+  border: 1px solid rgba(15,23,42,0.08);
   position: relative;
-  min-height: 40vh;      /* 默认就比原来大很多 */
+  min-height: 0;
 }
 
+/* iframe 本身仍占满预览区域 */
 .drive-preview-frame {
   width: 100%;
   height: 100%;
@@ -158,35 +167,38 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: #eee;
+  color: #4b5563;
   text-align: center;
   padding: 16px;
+  background: #ffffff;
 }
 
 .drive-preview-fallback .small {
   font-size: 0.75rem;
-  color: #ccc;
+  color: #9ca3af;
 }
 
-/* “只预览模式”：隐藏文件网格，让预览占更多高度 */
+/* “只预览模式”：隐藏文件网格，让预览占更多高度
+   同时这里才真正显示预览区域 */
 .drive-explorer-main.preview-only .drive-file-grid {
   display: none;
 }
 
 .drive-explorer-main.preview-only .drive-viewer-body {
+  display: block;       /* ⬅ 点击文件后才显示预览区 */
   min-height: 70vh;
 }
 
 /* 加载提示文字 */
 .drive-loading {
   font-size: 0.82rem;
-  color: #ddd;
+  color: #6b7280;
 }
 
 /* 响应式 */
 @media (max-width: 900px) {
   .drive-explorer-main {
-    padding: 8px 8px 10px;
+    padding: 0 0 10px;
     min-height: 60vh;
   }
 
@@ -194,7 +206,7 @@
     max-height: 35vh;
   }
 
-  .drive-viewer-body {
-    min-height: 45vh;
+  .drive-explorer-main.preview-only .drive-viewer-body {
+    min-height: 60vh;
   }
 }
