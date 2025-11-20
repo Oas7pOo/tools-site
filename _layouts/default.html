@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{ page.title | default: "冰兔的工具站" }}</title>
   <!-- 引入站点标志（favicon） -->
-  <link rel="icon" href="{{ site.baseurl }}/ico.svg" type="image/svg+xml">
+  <link rel="icon" href="{{ '/ico.svg' | relative_url }}" type="image/svg+xml">
   <!-- 引入 CSS -->
-  <link rel="stylesheet" href="{{ site.baseurl }}/css/style.css">
-  <link rel="stylesheet" href="{{ site.baseurl }}/css/tool_common.css">
+  <link rel="stylesheet" href="{{ '/css/style.css' | relative_url }}">
+  <link rel="stylesheet" href="{{ '/css/tool_common.css' | relative_url }}">
 
 </head>
 
@@ -28,7 +28,7 @@
         
         <!-- 顶级：索引（没有子菜单） -->
         <li class="nav-item">
-          <a href="{{ site.baseurl }}/index.html">索引</a>
+          <a href="{{ '/index.html' | relative_url }}">索引</a>
         </li>
 
         <!-- 顶级：PDF（有二级标题 DnD / CoC） -->
@@ -37,7 +37,7 @@
           <ul class="sub-nav">
             <!-- 二级：你原来的"猫猫头翻译组"也可以放在 PDF 下 -->
             <li class="nav-item">
-              <a href="{{ site.baseurl }}/pdf/pdf.html">猫猫头翻译组</a>
+              <a href="{{ '/pdf/pdf.html' | relative_url }}">猫猫头翻译组</a>
             </li>
           </ul>
         </li>
@@ -47,31 +47,31 @@
           <button type="button" class="nav-label">工具</button>
           <ul class="sub-nav">
             <li class="nav-item">
-              <a href="{{ site.baseurl }}/tools/img&zip.html">图片+ZIP 生成器</a>
+              <a href="{{ '/tools/img&zip.html' | relative_url }}">图片+ZIP 生成器</a>
             </li>
             <li class="nav-item">
-              <a href="{{ site.baseurl }}/tools/blind_watermark.html">盲水印/图片隐藏水印加密</a>
+              <a href="{{ '/tools/blind_watermark.html' | relative_url }}">盲水印/图片隐藏水印加密</a>
             </li>
             <li class="nav-item">
-              <a href="{{ site.baseurl }}/tools/binary_barcode.html">文字转二进制/条形码</a>
+              <a href="{{ '/tools/binary_barcode.html' | relative_url }}">文字转二进制/条形码</a>
             </li>
             <li class="nav-item">
-              <a href="{{ site.baseurl }}/tools/phantom_tank.html">幻影坦克</a>
+              <a href="{{ '/tools/phantom_tank.html' | relative_url }}">幻影坦克</a>
             </li>
             <li class="nav-item">
-              <a href="{{ site.baseurl }}/tools/hideQCcode.html">图片隐藏二维码</a>
+              <a href="{{ '/tools/hideQCcode.html' | relative_url }}">图片隐藏二维码</a>
             </li>
             <li class="nav-item">
-              <a href="{{ site.baseurl }}/tools/text2png.html">文字转图片</a>
+              <a href="{{ '/tools/text2png.html' | relative_url }}">文字转图片</a>
             </li>
             <li class="nav-item">
-              <a href="{{ site.baseurl }}/tools/morse_code.html">摩斯密码</a>
+              <a href="{{ '/tools/morse_code.html' | relative_url }}">摩斯密码</a>
             </li>
             <li class="nav-item">
-              <a href="{{ site.baseurl }}/tools/video2img.html">音频转图片</a>
+              <a href="{{ '/tools/video2img.html' | relative_url }}">音频转图片</a>
             </li>
             <li class="nav-item">
-              <a href="{{ site.baseurl }}/tools/low_jpeg.html">有损图片</a>
+              <a href="{{ '/tools/low_jpeg.html' | relative_url }}">有损图片</a>
             </li>
           </ul>
         </li>
@@ -81,7 +81,7 @@
           <button type="button" class="nav-label">博客</button>
           <ul class="sub-nav">
             <li class="nav-item">
-              <a href="{{ site.baseurl }}/blogs/introduction.html">测试页</a>
+              <a href="{{ '/blogs/introduction.html' | relative_url }}">测试页</a>
             </li>
             <!-- 以后可以在这里继续加更多博文链接 -->
           </ul>
@@ -107,7 +107,7 @@
   </div>
 
   <!-- 引入公共 JavaScript，如果有的话 -->
-  <script src="{{ site.baseurl }}/js/common.js"></script>
+  <script src="{{ '/js/common.js' | relative_url }}"></script>
 
   <!-- 防重复点击控制器 -->
   <script>

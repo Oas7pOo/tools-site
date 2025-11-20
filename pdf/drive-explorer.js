@@ -1,6 +1,6 @@
 /**
- * Drive Explorer - 简洁网盘风版本
- * 从 Google Drive 读取目录树，在右侧以“文件夹 + 文件网格 + 预览”方式展示
+ * Drive Explorer - 简洁网盘风版本（无左侧目录树）
+ * 从 Google Drive 读取目录，在页面中以“文件网格 + 大号预览区”展示
  */
 
 class DriveExplorer {
@@ -10,8 +10,8 @@ class DriveExplorer {
     this.rootFolderId = options.rootFolderId || '1KjVi0JTbIOBvls0Z-BjkPWy4d3FTpryi';
     this.rootPath = options.rootPath || '猫猫头翻译组';
 
-    // DOM
-    this.treeContainer = null;
+    // DOM 引用
+    this.treeContainer = null;          // 允许为 null（不再展示左侧树）
     this.fileGridContainer = null;
     this.previewFrame = null;
     this.previewFallback = null;
@@ -20,15 +20,20 @@ class DriveExplorer {
     this.openInDriveLink = null;
     this.downloadBtn = null;
     this.breadcrumbEl = null;
+    this.mainPanelEl = null;            // .drive-explorer-main
+    this.backBtn = null;                // 返回文件列表
 
     // 状态
-    this.currentActiveRow = null;
+    this.currentActiveRow = null;       // 如果以后恢复树可以继续使用
     this.isInitialized = false;
     this.rootNode = null;
     this.currentFolderNode = null;
     this.nodeMap = {};
   }
 
+  /**
+   * 初始化
+   */
   async init() {
     try {
       this.initDOMElements();
@@ -41,8 +46,11 @@ class DriveExplorer {
     }
   }
 
+  /**
+   * 绑定 DOM 元素
+   */
   initDOMElements() {
-    this.treeContainer = document.getElementById('driveTree');
+    this.treeContainer = document.getElementById('driveTree');      // 页面里已没有该元素，为 null 也没关系
     this.fileGridContainer = document.getElementById('driveFileGrid');
     this.previewFrame = document.getElementById('filePreviewFrame');
     this.previewFallback = document.getElementById('filePreviewFallback');
@@ -51,8 +59,22 @@ class DriveExplorer {
     this.openInDriveLink = document.getElementById('openInDrive');
     this.downloadBtn = document.getElementById('downloadFile');
     this.breadcrumbEl = document.getElementById('driveBreadcrumb');
+    this.mainPanelEl = document.querySelector('.drive-explorer-main');
+    this.backBtn = document.getElementById('backToList');
+
+    if (this.backBtn) {
+      this.backBtn.addEventListener('click', () => {
+        const folder = this.currentFolderNode || this.rootNode;
+        if (folder) {
+          this.openFolder(folder, null);  // 回到当前文件夹的文件列表
+        }
+      });
+    }
   }
 
+  /**
+   * 初始化 Google API
+   */
   async initGoogleAPI() {
     return new Promise((resolve, reject) => {
       if (window.gapi && window.gapi.load) {
@@ -73,11 +95,18 @@ class DriveExplorer {
     });
   }
 
+  /**
+   * 加载根目录及其子树
+   * 现在 treeContainer 可选，只要 fileGrid 存在就能工作
+   */
   async loadDriveTree() {
-    if (!this.treeContainer || !this.fileGridContainer) return;
+    if (!this.fileGridContainer) return;
 
     const loadingHTML = '<p class="drive-loading">正在从 Google Drive 加载目录...</p>';
-    this.treeContainer.innerHTML = loadingHTML;
+
+    if (this.treeContainer) {
+      this.treeContainer.innerHTML = loadingHTML;
+    }
     this.fileGridContainer.innerHTML = loadingHTML;
 
     this.nodeMap = {};
@@ -99,15 +128,21 @@ class DriveExplorer {
 
     this.rootNode.children = await this.buildTree(this.rootFolderId, this.rootPath, this.rootNode);
 
-    this.renderTree([this.rootNode], this.treeContainer);
+    // 可选：渲染左侧树（现在页面里没有该容器，不会显示）
+    if (this.treeContainer) {
+      this.renderTree([this.rootNode], this.treeContainer);
+      this.treeContainer.querySelector('.drive-loading')?.remove();
+    }
 
     // 默认打开根文件夹
     this.openFolder(this.rootNode, null);
 
-    this.treeContainer.querySelector('.drive-loading')?.remove();
     this.fileGridContainer.querySelector('.drive-loading')?.remove();
   }
 
+  /**
+   * 列出某个文件夹的直接子项
+   */
   async listChildren(folderId) {
     const result = [];
     let pageToken = null;
@@ -128,6 +163,9 @@ class DriveExplorer {
     return result;
   }
 
+  /**
+   * 递归构建树结构
+   */
   async buildTree(folderId, parentPath, parentNode) {
     const items = await this.listChildren(folderId);
 
@@ -155,6 +193,9 @@ class DriveExplorer {
     return nodes;
   }
 
+  /**
+   * 创建节点对象
+   */
   createNode(item, parentPath, parentNode) {
     const isFolder = item.mimeType === 'application/vnd.google-apps.folder';
     const path = parentPath ? parentPath + ' / ' + item.name : item.name;
@@ -179,11 +220,14 @@ class DriveExplorer {
     return node;
   }
 
+  /**
+   * 构建下载链接
+   */
   buildDownloadLink(item, isFolder, fallbackViewLink) {
-    // 纯前端 + API Key 无法直接打包下载整个文件夹，只能在 Drive 页面压缩下载
+    // 纯前端 + API Key 无法打包下载整个文件夹，只能在 Drive 页面压缩下载
     if (isFolder) return null;
 
-    // Google Docs / Sheets / Slides 等在线文档属于应用类型，匿名不能直接导出下载
+    // Google Docs / Sheets / Slides 等在线文档，匿名 API 不能直接导出，只能跳转查看
     if (item.mimeType && item.mimeType.startsWith('application/vnd.google-apps.')) {
       return fallbackViewLink || item.webViewLink || `https://drive.google.com/file/d/${item.id}/view`;
     }
@@ -195,6 +239,9 @@ class DriveExplorer {
     return `https://drive.google.com/uc?export=download&id=${item.id}`;
   }
 
+  /**
+   * 渲染（可选）目录树
+   */
   renderTree(nodes, container) {
     const ul = document.createElement('ul');
 
@@ -249,6 +296,9 @@ class DriveExplorer {
     return ul;
   }
 
+  /**
+   * 创建树节点行
+   */
   createNodeRow(node) {
     const row = document.createElement('div');
     row.className = 'drive-node-row';
@@ -273,8 +323,50 @@ class DriveExplorer {
     return row;
   }
 
+  /**
+   * 进入“只预览模式”：隐藏文件网格，预览占据主要高度
+   */
+  enterPreviewMode() {
+    if (this.mainPanelEl) {
+      this.mainPanelEl.classList.add('preview-only');
+    }
+    if (this.fileGridContainer) {
+      this.fileGridContainer.style.display = 'none';
+    }
+    if (this.backBtn) {
+      this.backBtn.style.display = 'inline-flex';
+    }
+  }
+
+  /**
+   * 退出“只预览模式”
+   * resetPreview = true 时顺便清空 iframe
+   */
+  exitPreviewMode(resetPreview = false) {
+    if (this.mainPanelEl) {
+      this.mainPanelEl.classList.remove('preview-only');
+    }
+    if (this.fileGridContainer) {
+      this.fileGridContainer.style.display = '';
+    }
+    if (this.backBtn) {
+      this.backBtn.style.display = 'none';
+    }
+    if (resetPreview && this.previewFrame && this.previewFallback) {
+      this.previewFrame.src = '';
+      this.previewFrame.style.display = 'none';
+      this.previewFallback.style.display = 'flex';
+    }
+  }
+
+  /**
+   * 打开文件夹（刷新文件网格）
+   */
   openFolder(node, rowElement) {
-    // 左侧高亮
+    // 每次进入文件夹，先退出“只预览模式”
+    this.exitPreviewMode(true);
+
+    // 左侧树的高亮逻辑（虽然现在看不到）
     if (this.currentActiveRow) {
       this.currentActiveRow.classList.remove('active');
     }
@@ -294,14 +386,7 @@ class DriveExplorer {
       this.currentFilePathEl.textContent = node.path || node.name;
     }
 
-    // 清空预览，仅保持提示
-    if (this.previewFrame && this.previewFallback) {
-      this.previewFrame.style.display = 'none';
-      this.previewFrame.src = '';
-      this.previewFallback.style.display = 'flex';
-    }
-
-    // 按钮：文件夹没有“下载文件”；但可以“在 Drive 中打开”（用于整夹下载）
+    // 文件夹：隐藏下载按钮，只显示“在 Drive 中打开”（用于整夹打包下载等）
     if (this.downloadBtn) {
       this.downloadBtn.style.display = 'none';
     }
@@ -318,6 +403,9 @@ class DriveExplorer {
     this.updateBreadcrumb(node);
   }
 
+  /**
+   * 渲染文件网格
+   */
   renderFileGrid(folderNode) {
     if (!this.fileGridContainer) return;
 
@@ -370,6 +458,9 @@ class DriveExplorer {
     this.fileGridContainer.appendChild(fragment);
   }
 
+  /**
+   * 更新面包屑
+   */
   updateBreadcrumb(node) {
     if (!this.breadcrumbEl || !node) return;
 
@@ -404,6 +495,9 @@ class DriveExplorer {
     });
   }
 
+  /**
+   * 提取文件扩展名
+   */
   getFileExtension(name) {
     if (!name) return '文件';
     const idx = name.lastIndexOf('.');
@@ -411,8 +505,11 @@ class DriveExplorer {
     return name.substring(idx + 1).toLowerCase();
   }
 
+  /**
+   * 打开文件进行预览（进入只预览模式）
+   */
   openFile(node, rowElement) {
-    // 左侧高亮（如果从树里点进来的话）
+    // 左侧树高亮（如果以后恢复树）
     if (rowElement) {
       if (this.currentActiveRow) {
         this.currentActiveRow.classList.remove('active');
@@ -428,6 +525,10 @@ class DriveExplorer {
       this.currentFilePathEl.textContent = node.path || node.name;
     }
 
+    // 进入“只预览模式”：隐藏文件图标区域，只留下大预览
+    this.enterPreviewMode();
+
+    // 面包屑仍然代表当前所在的文件夹
     if (this.breadcrumbEl) {
       this.updateBreadcrumb(node.parent || this.currentFolderNode || this.rootNode || node);
     }
@@ -460,6 +561,9 @@ class DriveExplorer {
     }
   }
 
+  /**
+   * 显示错误
+   */
   showError(message) {
     if (this.treeContainer) {
       this.treeContainer.innerHTML = `<p style="color:#ffb3b3;font-size:0.85rem;">${message}</p>`;
@@ -469,6 +573,9 @@ class DriveExplorer {
     }
   }
 
+  /**
+   * 销毁
+   */
   destroy() {
     this.currentActiveRow = null;
     this.isInitialized = false;

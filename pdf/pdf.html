@@ -10,15 +10,6 @@ permalink: /pdf/pdf.html
 <link rel="stylesheet" href="{{ '/css/drive-explorer.css' | relative_url }}">
 
 <div class="drive-explorer-container">
-  <!-- 左侧目录树 -->
-  <aside class="drive-explorer-sidebar">
-    <h2>📁 文档目录</h2>
-    <div id="driveTree" class="drive-tree">
-      <p class="drive-loading">正在从 Google Drive 加载目录...</p>
-    </div>
-  </aside>
-
-  <!-- 右侧主区域：标题 + 面包屑 + 文件网格 + 预览 -->
   <section class="drive-explorer-main">
     <div class="drive-viewer-header">
       <div>
@@ -26,6 +17,14 @@ permalink: /pdf/pdf.html
         <div id="currentFilePath" class="drive-current-path"></div>
       </div>
       <div class="drive-viewer-actions">
+        <!-- 返回列表（只在预览模式下显示） -->
+        <button id="backToList"
+                type="button"
+                class="drive-btn"
+                style="display:none;">
+          返回文件列表
+        </button>
+
         <!-- 单个文件下载按钮（普通文件直接下载，在线文档跳转查看） -->
         <a id="downloadFile"
            href="#"
@@ -37,7 +36,7 @@ permalink: /pdf/pdf.html
           下载文件
         </a>
 
-        <!-- 文件 / 文件夹 在 Drive 中打开（用于整夹下载、在线文档） -->
+        <!-- 文件 / 文件夹 在 Drive 中打开（用于整夹下载、在线文档、查看 PDF 书签） -->
         <a id="openInDrive"
            href="#"
            target="_blank"
@@ -49,7 +48,7 @@ permalink: /pdf/pdf.html
       </div>
     </div>
 
-    <!-- 面包屑路径 -->
+    <!-- 面包屑路径（点击上级即可回到文件列表） -->
     <div id="driveBreadcrumb" class="drive-breadcrumb"></div>
 
     <!-- 当前文件夹中的 “文件夹 + 文件” 网格 -->
@@ -57,7 +56,7 @@ permalink: /pdf/pdf.html
       <p class="drive-loading">正在从 Google Drive 加载目录...</p>
     </div>
 
-    <!-- 底部预览区域 -->
+    <!-- 底部大号预览区域 -->
     <div class="drive-viewer-body">
       <iframe id="filePreviewFrame"
               src=""
@@ -65,6 +64,10 @@ permalink: /pdf/pdf.html
               class="drive-preview-frame"
               style="display:none;"></iframe>
       <div id="filePreviewFallback" class="drive-preview-fallback">
+        <p>在上面的文件网格中点击任意文件即可在此处预览。</p>
+        <p class="small">
+          如果需要查看 PDF 的书签 / 章节目录，可以点击右上角「在 Google Drive 中打开」，使用 Drive 自带阅读器。
+        </p>
       </div>
     </div>
   </section>

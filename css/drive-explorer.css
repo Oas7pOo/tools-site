@@ -1,96 +1,12 @@
-/* Drive Explorer - 简洁网盘风样式 */
+/* Drive Explorer - 单列网盘风样式 */
 
+/* 外层容器，占满 default.html 的 content 宽度 */
 .drive-explorer-container {
-  display: grid;
-  grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
-  gap: 16px;
-  padding: 10px 0 20px;
+  padding: 8px 0 20px;
   min-height: 70vh;
 }
 
-/* 左侧树形目录 */
-
-.drive-explorer-sidebar {
-  background: rgba(0,0,0,0.18);
-  border-radius: 8px;
-  padding: 10px 12px;
-  border: 1px solid rgba(255,255,255,0.14);
-  overflow: auto;
-}
-
-.drive-explorer-sidebar h2 {
-  font-size: 0.95rem;
-  margin: 0 0 4px;
-  color: #fff;
-}
-
-.drive-tip {
-  font-size: 0.78rem;
-  color: #ddd;
-  margin-bottom: 8px;
-}
-
-.drive-tree {
-  font-size: 0.85rem;
-  color: #eee;
-}
-
-.drive-loading {
-  font-size: 0.82rem;
-  color: #ddd;
-}
-
-.drive-tree ul {
-  list-style: none;
-  margin: 0;
-  padding-left: 14px;
-}
-
-.drive-node {
-  margin: 2px 0;
-}
-
-.drive-node-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  cursor: pointer;
-  padding: 2px 4px;
-  border-radius: 4px;
-}
-
-.drive-node-row:hover {
-  background: rgba(255,255,255,0.08);
-}
-
-.drive-node-row.folder-label {
-  font-weight: 600;
-}
-
-.drive-node-row.active {
-  background: rgba(59,130,246,0.28);
-}
-
-.drive-node-row .chevron {
-  width: 14px;
-  text-align: center;
-  font-size: 0.7rem;
-}
-
-.drive-node-row .icon {
-  width: 18px;
-  text-align: center;
-}
-
-.drive-node-row .name {
-  flex: 1;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  overflow: hidden;
-}
-
-/* 右侧主区域 */
-
+/* 主区域：标题 + 按钮 + 面包屑 + 文件网格 + 预览 */
 .drive-explorer-main {
   background: rgba(0,0,0,0.18);
   border-radius: 8px;
@@ -102,6 +18,7 @@
   color: #fff;
 }
 
+/* 顶部标题与按钮区 */
 .drive-viewer-header {
   display: flex;
   justify-content: space-between;
@@ -111,7 +28,7 @@
 }
 
 .drive-current-file {
-  font-size: 0.98rem;
+  font-size: 1rem;
   font-weight: 600;
 }
 
@@ -144,11 +61,10 @@
   filter: brightness(1.08);
 }
 
-/* 面包屑 */
-
+/* 面包屑导航 */
 .drive-breadcrumb {
   font-size: 0.78rem;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
   display: flex;
   flex-wrap: wrap;
   gap: 2px;
@@ -170,16 +86,16 @@
   padding: 0 2px;
 }
 
-/* 文件网格 */
-
+/* 文件网格（列表模式） */
 .drive-file-grid {
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   margin-top: 4px;
   padding-top: 4px;
   border-top: 1px solid rgba(255,255,255,0.08);
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: 10px;
+  max-height: 40vh;       /* 上面一块：文件列表 */
   overflow: auto;
 }
 
@@ -218,15 +134,15 @@
   color: #ccc;
 }
 
-/* 预览区域 */
-
+/* 预览区域（默认下面一大块） */
 .drive-viewer-body {
-  flex: 0 0 320px;
+  flex: 1 1 auto;
+  margin-top: 8px;
   border-radius: 6px;
   overflow: hidden;
-  margin-top: 8px;
   background: rgba(0,0,0,0.25);
   position: relative;
+  min-height: 40vh;      /* 默认就比原来大很多 */
 }
 
 .drive-preview-frame {
@@ -252,22 +168,33 @@
   color: #ccc;
 }
 
+/* “只预览模式”：隐藏文件网格，让预览占更多高度 */
+.drive-explorer-main.preview-only .drive-file-grid {
+  display: none;
+}
+
+.drive-explorer-main.preview-only .drive-viewer-body {
+  min-height: 70vh;
+}
+
+/* 加载提示文字 */
+.drive-loading {
+  font-size: 0.82rem;
+  color: #ddd;
+}
+
 /* 响应式 */
-
 @media (max-width: 900px) {
-  .drive-explorer-container {
-    grid-template-columns: 1fr;
-  }
-
-  .drive-explorer-sidebar {
-    max-height: 260px;
-  }
-
   .drive-explorer-main {
-    min-height: 0;
+    padding: 8px 8px 10px;
+    min-height: 60vh;
+  }
+
+  .drive-file-grid {
+    max-height: 35vh;
   }
 
   .drive-viewer-body {
-    flex-basis: 260px;
+    min-height: 45vh;
   }
 }
