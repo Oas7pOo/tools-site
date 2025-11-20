@@ -350,3 +350,83 @@ footer {
     display: block;
   }
 }
+
+/* ========== 左侧折叠菜单 ========== */
+
+/* 基础结构 */
+.sidebar .nav-list,
+.sidebar .sub-nav {
+  list-style: none;
+  margin: 0;
+  padding-left: 0;
+}
+
+.sidebar .nav-item {
+  margin: 0;
+}
+
+/* 有子菜单的 nav 标题 */
+.sidebar .nav-item.has-children > .nav-label {
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.95rem;
+}
+
+/* hover 效果 */
+.sidebar .nav-item.has-children > .nav-label:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* 小箭头（用 ::after 画） */
+.sidebar .nav-item.has-children > .nav-label::after {
+  content: "▸";
+  font-size: 0.8em;
+  margin-left: 0.3em;
+  transition: transform 0.2s ease;
+}
+
+/* 展开状态箭头旋转 */
+.sidebar .nav-item.expanded > .nav-label::after {
+  transform: rotate(90deg);
+}
+
+/* 子菜单默认收起 */
+.sidebar .sub-nav {
+  display: none;
+  margin-left: 0.75rem;      /* 二三级缩进 */
+  padding-left: 0.25rem;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* 父 li 有 .expanded 时展开子菜单 */
+.sidebar .nav-item.expanded > .sub-nav {
+  display: block;
+}
+
+/* 子链接样式 */
+.sidebar .sub-nav .nav-item > a {
+  display: block;
+  padding: 4px 10px 4px 4px;
+  color: #ddd;
+  font-size: 0.9rem;
+  text-decoration: none;
+}
+
+.sidebar .sub-nav .nav-item > a:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+/* 当前页面高亮（你原来的 active class 也可以继续用） */
+.sidebar .nav-list a.active {
+  color: #4CAF50;
+  font-weight: bold;
+}

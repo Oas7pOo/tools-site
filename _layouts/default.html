@@ -25,28 +25,65 @@
       <ul class="nav-list">
         <!-- 空出菜单按钮 -->
         <br><br>
-        <!-- 索引链接 -->
-        <li><a href="{{ site.baseurl }}/index.html">索引</a></li>
-        <!-- 工具分组 -->
-        <li>
-          <span>工具</span>
+        
+        <!-- 顶级：索引（没有子菜单） -->
+        <li class="nav-item">
+          <a href="{{ site.baseurl }}/index.html">索引</a>
+        </li>
+
+        <!-- 顶级：PDF（有二级标题 DnD / CoC） -->
+        <li class="nav-item has-children">
+          <button type="button" class="nav-label">猫猫头翻译组</button>
           <ul class="sub-nav">
-            <li><a href="{{ site.baseurl }}/tools/img&zip.html">图片+ZIP 生成器</a></li>
-            <li><a href="{{ site.baseurl }}/tools/blind_watermark.html">盲水印/图片隐藏水印加密</a></li>
-            <li><a href="{{ site.baseurl }}/tools/binary_barcode.html">文字转二进制/条形码</a></li>
-            <li><a href="{{ site.baseurl }}/tools/phantom_tank.html">幻影坦克</a></li>
-            <li><a href="{{ site.baseurl }}/tools/hideQCcode.html">图片隐藏二维码</a></li>
-            <li><a href="{{ site.baseurl }}/tools/text2png.html">文字转图片</a></li>
-            <li><a href="{{ site.baseurl }}/tools/morse_code.html">摩斯密码</a></li>
-            <li><a href="{{ site.baseurl }}/tools/video2img.html">音频转图片</a></li>
-            <li><a href="{{ site.baseurl }}/tools/low_jpeg.html">有损图片</a></li>
+            <!-- 二级：你原来的"猫猫头翻译组"也可以放在 PDF 下 -->
+            <li class="nav-item">
+              <a href="{{ site.baseurl }}/pdf/pdf.html">猫猫头翻译组</a>
+            </li>
           </ul>
         </li>
-        <!-- 博客分组 -->
-        <li>
-          <span>博客</span>
+
+        <!-- 顶级：工具 -->
+        <li class="nav-item has-children">
+          <button type="button" class="nav-label">工具</button>
           <ul class="sub-nav">
-            <li><a href="{{ site.baseurl }}/blogs/introduction.html">测试页</a></li>
+            <li class="nav-item">
+              <a href="{{ site.baseurl }}/tools/img&zip.html">图片+ZIP 生成器</a>
+            </li>
+            <li class="nav-item">
+              <a href="{{ site.baseurl }}/tools/blind_watermark.html">盲水印/图片隐藏水印加密</a>
+            </li>
+            <li class="nav-item">
+              <a href="{{ site.baseurl }}/tools/binary_barcode.html">文字转二进制/条形码</a>
+            </li>
+            <li class="nav-item">
+              <a href="{{ site.baseurl }}/tools/phantom_tank.html">幻影坦克</a>
+            </li>
+            <li class="nav-item">
+              <a href="{{ site.baseurl }}/tools/hideQCcode.html">图片隐藏二维码</a>
+            </li>
+            <li class="nav-item">
+              <a href="{{ site.baseurl }}/tools/text2png.html">文字转图片</a>
+            </li>
+            <li class="nav-item">
+              <a href="{{ site.baseurl }}/tools/morse_code.html">摩斯密码</a>
+            </li>
+            <li class="nav-item">
+              <a href="{{ site.baseurl }}/tools/video2img.html">音频转图片</a>
+            </li>
+            <li class="nav-item">
+              <a href="{{ site.baseurl }}/tools/low_jpeg.html">有损图片</a>
+            </li>
+          </ul>
+        </li>
+
+        <!-- 顶级：博客 -->
+        <li class="nav-item has-children">
+          <button type="button" class="nav-label">博客</button>
+          <ul class="sub-nav">
+            <li class="nav-item">
+              <a href="{{ site.baseurl }}/blogs/introduction.html">测试页</a>
+            </li>
+            <!-- 以后可以在这里继续加更多博文链接 -->
           </ul>
         </li>
       </ul>
@@ -810,6 +847,101 @@
             window.bgAnimation.destroy();
           } catch (error) {
             console.warn('清理背景动画时出错:', error);
+          }
+        }
+      });
+    });
+  </script>
+
+  <!-- 折叠菜单逻辑 -->
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // 折叠菜单控制器类
+      class CollapsibleMenu {
+        constructor() {
+          this.navItems = document.querySelectorAll('.sidebar .nav-item.has-children');
+          this.init();
+        }
+        
+        init() {
+          this.bindEvents();
+        }
+        
+        bindEvents() {
+          this.navItems.forEach(item => {
+            const label = item.querySelector('.nav-label');
+            if (label) {
+              label.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.toggleItem(item);
+              });
+            }
+          });
+        }
+        
+        toggleItem(item) {
+          const isExpanded = item.classList.contains('expanded');
+          
+          if (isExpanded) {
+            item.classList.remove('expanded');
+          } else {
+            item.classList.add('expanded');
+          }
+        }
+        
+        // 展开指定项目
+        expandItem(item) {
+          if (item && item.classList.contains('has-children')) {
+            item.classList.add('expanded');
+          }
+        }
+        
+        // 收起指定项目
+        collapseItem(item) {
+          if (item) {
+            item.classList.remove('expanded');
+          }
+        }
+        
+        // 展开所有项目
+        expandAll() {
+          this.navItems.forEach(item => {
+            item.classList.add('expanded');
+          });
+        }
+        
+        // 收起所有项目
+        collapseAll() {
+          this.navItems.forEach(item => {
+            item.classList.remove('expanded');
+          });
+        }
+        
+        // 销毁事件监听
+        destroy() {
+          this.navItems.forEach(item => {
+            const label = item.querySelector('.nav-label');
+            if (label) {
+              label.removeEventListener('click', this.toggleItem);
+            }
+          });
+        }
+      }
+      
+      // 初始化折叠菜单
+      const collapsibleMenu = new CollapsibleMenu();
+      
+      // 暴露到全局，便于调试或其他脚本使用
+      window.collapsibleMenu = collapsibleMenu;
+      
+      // 确保在页面卸载时清理资源
+      window.addEventListener('beforeunload', () => {
+        if (window.collapsibleMenu && window.collapsibleMenu.destroy) {
+          try {
+            window.collapsibleMenu.destroy();
+          } catch (error) {
+            console.warn('清理折叠菜单时出错:', error);
           }
         }
       });

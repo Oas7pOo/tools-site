@@ -1,0 +1,458 @@
+---
+layout: default
+title: 猫猫头翻译组文库
+header_title: 猫猫头翻译组 - 在线文档
+header_description: 自动从 Google Drive 加载 DnD / CoC 等文档，在线浏览
+permalink: /pdf/pdf.html
+---
+
+<div class="drive-explorer-container">
+  <div class="drive-explorer-sidebar">
+    <h2>📁 文档目录（Google Drive）</h2>
+    <p class="drive-tip">数据来源：Google Drive 文件夹结构（dnd / coc 等子文件夹会自动展开）</p>
+    <div id="driveTree" class="drive-tree">
+      <p class="drive-loading">正在从 Google Drive 加载目录...</p>
+    </div>
+  </div>
+
+  <div class="drive-explorer-main">
+    <div class="drive-viewer-header">
+      <div>
+        <div id="currentFileName" class="drive-current-file">请选择左侧文件进行预览</div>
+        <div id="currentFilePath" class="drive-current-path"></div>
+      </div>
+      <div class="drive-viewer-actions">
+        <a id="openInDrive" href="#" target="_blank" rel="noopener" class="drive-btn" style="display:none;">
+          在 Google Drive 中打开
+        </a>
+      </div>
+    </div>
+
+    <div class="drive-viewer-body">
+      <iframe id="filePreviewFrame" src="" frameborder="0" class="drive-preview-frame" style="display:none;"></iframe>
+      <div id="filePreviewFallback" class="drive-preview-fallback">
+        <p>👈 在左侧选择一个文件进行预览。</p>
+        <p class="small">支持 PDF / 图片 / doc / docx / xls / ppt / txt 等，只要 Drive 可以预览，这里就可以内嵌。</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+.drive-explorer-container {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 20px;
+  padding: 10px 0;
+  min-height: 70vh;
+}
+
+/* 左侧树形目录 */
+.drive-explorer-sidebar {
+  background: rgba(0,0,0,0.25);
+  border-radius: 12px;
+  padding: 15px;
+  border: 1px solid rgba(255,255,255,0.15);
+  backdrop-filter: blur(10px);
+  overflow: auto;
+  max-height: 80vh;
+}
+
+.drive-explorer-sidebar h2 {
+  font-size: 1.1rem;
+  margin: 0 0 5px;
+  color: #fff;
+}
+
+.drive-tip {
+  font-size: 0.8rem;
+  color: #ccc;
+  margin-bottom: 10px;
+}
+
+.drive-tree {
+  font-size: 0.9rem;
+  color: #eee;
+}
+
+.drive-loading {
+  font-size: 0.85rem;
+  color: #ddd;
+}
+
+.drive-tree ul {
+  list-style: none;
+  margin: 0;
+  padding-left: 14px;
+}
+
+.drive-node {
+  margin: 2px 0;
+}
+
+.drive-node-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  padding: 3px 4px;
+  border-radius: 6px;
+}
+
+.drive-node-row:hover {
+  background: rgba(255,255,255,0.06);
+}
+
+.drive-node-row.folder-label {
+  font-weight: 600;
+}
+
+.drive-node-row .chevron {
+  width: 14px;
+  text-align: center;
+  font-size: 0.7rem;
+  opacity: 0.8;
+}
+
+.drive-node-row .icon {
+  font-size: 0.9rem;
+  width: 18px;
+  text-align: center;
+}
+
+.drive-node-row .name {
+  flex: 1;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.drive-node-row.active {
+  background: rgba(76,175,80,0.25);
+}
+
+/* 右侧预览区 */
+.drive-explorer-main {
+  background: rgba(0,0,0,0.25);
+  border-radius: 12px;
+  padding: 15px;
+  border: 1px solid rgba(255,255,255,0.15);
+  backdrop-filter: blur(10px);
+  display: flex;
+  flex-direction: column;
+  min-height: 70vh;
+}
+
+.drive-viewer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  gap: 10px;
+}
+
+.drive-current-file {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #fff;
+}
+
+.drive-current-path {
+  font-size: 0.8rem;
+  color: #ccc;
+}
+
+.drive-viewer-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.drive-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: #fff;
+  background: linear-gradient(45deg, #2196F3, #1976D2);
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.drive-btn:hover {
+  filter: brightness(1.1);
+}
+
+.drive-viewer-body {
+  flex: 1;
+  position: relative;
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(0,0,0,0.35);
+  margin-top: 5px;
+}
+
+.drive-preview-frame {
+  width: 100%;
+  height: calc(80vh - 90px);
+  border: none;
+}
+
+.drive-preview-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #eee;
+  text-align: center;
+  padding: 20px;
+}
+
+.drive-preview-fallback .small {
+  font-size: 0.8rem;
+  color: #ccc;
+}
+
+@media (max-width: 900px) {
+  .drive-explorer-container {
+    grid-template-columns: 1fr;
+  }
+  .drive-explorer-sidebar {
+    max-height: 40vh;
+  }
+  .drive-preview-frame {
+    height: 60vh;
+  }
+}
+</style>
+
+<!-- Google API JS -->
+<script src="https://apis.google.com/js/api.js"></script>
+<script>
+(function() {
+  // === 你需要替换的两个配置 ===
+  const API_KEY = 'AIzaSyCMkQj7OgwdXB5DutdFZmj2plixl-PElZA';   // <- 换成你自己的 API Key
+  const ROOT_FOLDER_ID = '1KjVi0JTbIOBvls0Z-BjkPWy4d3FTpryi'; // 你的 Drive 根目录（含 dnd / coc）
+
+  // === 一些 DOM 引用 ===
+  const treeContainer = document.getElementById('driveTree');
+  const previewFrame = document.getElementById('filePreviewFrame');
+  const previewFallback = document.getElementById('filePreviewFallback');
+  const currentFileNameEl = document.getElementById('currentFileName');
+  const currentFilePathEl = document.getElementById('currentFilePath');
+  const openInDriveLink = document.getElementById('openInDrive');
+
+  let currentActiveRow = null;
+
+  // 一个简单的树节点结构
+  function createNode(item, parentPath) {
+    const isFolder = item.mimeType === 'application/vnd.google-apps.folder';
+    const node = {
+      id: item.id,
+      name: item.name,
+      mimeType: item.mimeType,
+      webViewLink: item.webViewLink || null,
+      children: [],
+      isFolder,
+      path: parentPath ? parentPath + ' / ' + item.name : item.name
+    };
+    return node;
+  }
+
+  // 调 Drive API 列出某个文件夹下所有子项
+  async function listChildren(folderId) {
+    const result = [];
+    let pageToken = null;
+    do {
+      const res = await gapi.client.drive.files.list({
+        q: `'${folderId}' in parents and trashed = false`,
+        pageSize: 1000,
+        fields: 'nextPageToken, files(id, name, mimeType, parents, webViewLink)',
+        pageToken
+      });
+      const files = res.result.files || [];
+      result.push(...files);
+      pageToken = res.result.nextPageToken;
+    } while (pageToken);
+    return result;
+  }
+
+  // 递归构建树
+  async function buildTree(folderId, parentPath) {
+    const items = await listChildren(folderId);
+    const folders = items.filter(f => f.mimeType === 'application/vnd.google-apps.folder')
+                        .sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN'));
+    const files   = items.filter(f => f.mimeType !== 'application/vnd.google-apps.folder')
+                        .sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN'));
+
+    const nodes = [];
+    for (const folder of folders) {
+      const node = createNode(folder, parentPath);
+      node.children = await buildTree(folder.id, node.path);
+      nodes.push(node);
+    }
+    for (const f of files) {
+      const node = createNode(f, parentPath);
+      nodes.push(node);
+    }
+    return nodes;
+  }
+
+  // 渲染树到 DOM
+  function renderTree(nodes, container) {
+    const ul = document.createElement('ul');
+    nodes.forEach(node => {
+      const li = document.createElement('li');
+      li.className = 'drive-node';
+
+      const row = document.createElement('div');
+      row.className = 'drive-node-row';
+      if (node.isFolder) {
+        row.classList.add('folder-label');
+      }
+
+      const chevron = document.createElement('span');
+      chevron.className = 'chevron';
+      chevron.textContent = node.isFolder ? '▸' : '';
+      row.appendChild(chevron);
+
+      const icon = document.createElement('span');
+      icon.className = 'icon';
+      icon.textContent = node.isFolder ? '📁' : '📄';
+      row.appendChild(icon);
+
+      const name = document.createElement('span');
+      name.className = 'name';
+      name.textContent = node.name;
+      row.appendChild(name);
+
+      li.appendChild(row);
+
+      if (node.isFolder && node.children && node.children.length > 0) {
+        const childUl = renderTree(node.children, null);
+        childUl.style.display = 'none';
+        li.appendChild(childUl);
+
+        // 点击文件夹，折叠/展开
+        row.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const isOpen = childUl.style.display !== 'none';
+          childUl.style.display = isOpen ? 'none' : 'block';
+          chevron.textContent = isOpen ? '▸' : '▾';
+        });
+      } else if (node.isFolder && (!node.children || node.children.length === 0)) {
+        // 空文件夹
+        row.addEventListener('click', (e) => {
+          e.stopPropagation();
+          chevron.textContent = chevron.textContent === '▸' ? '▾' : '▸';
+        });
+      }
+
+      // 文件点击：在右侧预览
+      if (!node.isFolder) {
+        row.addEventListener('click', (e) => {
+          e.stopPropagation();
+          openFile(node, row);
+        });
+      }
+
+      ul.appendChild(li);
+    });
+
+    if (container) {
+      container.innerHTML = '';
+      container.appendChild(ul);
+    }
+    return ul;
+  }
+
+  // 在右侧打开文件预览
+  function openFile(node, rowElement) {
+    // 高亮当前
+    if (currentActiveRow) {
+      currentActiveRow.classList.remove('active');
+    }
+    currentActiveRow = rowElement;
+    currentActiveRow.classList.add('active');
+
+    currentFileNameEl.textContent = node.name;
+    currentFilePathEl.textContent = node.path || node.name;
+
+    // 预览链接：优先使用 webViewLink，再替换为 preview
+    let viewLink = node.webViewLink || `https://drive.google.com/file/d/${node.id}/view`;
+    let previewLink = viewLink.replace('/view', '/preview');
+
+    previewFrame.style.display = 'block';
+    previewFallback.style.display = 'none';
+    previewFrame.src = previewLink;
+
+    // “在 Drive 打开”按钮
+    openInDriveLink.style.display = 'inline-flex';
+    openInDriveLink.href = viewLink;
+  }
+
+  // 初始化 Google API 客户端
+  function initGapiClient() {
+    return gapi.client.init({
+      apiKey: API_KEY,
+      discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest']
+    });
+  }
+
+  // 主入口：加载树 & 渲染
+  async function initDriveExplorer() {
+    try {
+      if (!treeContainer) return;
+      treeContainer.innerHTML = '<p class="drive-loading">正在从 Google Drive 加载目录...</p>';
+
+      const rootPath = '猫猫头翻译组';
+      const rootNode = {
+        id: ROOT_FOLDER_ID,
+        name: rootPath,
+        mimeType: 'application/vnd.google-apps.folder',
+        isFolder: true,
+        path: rootPath,
+        children: await buildTree(ROOT_FOLDER_ID, rootPath)
+      };
+
+      renderTree([rootNode], treeContainer);
+      treeContainer.querySelector('.drive-loading')?.remove();
+    } catch (err) {
+      console.error('加载 Drive 目录失败:', err);
+      if (treeContainer) {
+        treeContainer.innerHTML = '<p style="color:#ffb3b3;font-size:0.85rem;">加载 Google Drive 目录失败，请检查 API Key、文件夹共享权限或稍后重试。</p>';
+      }
+    }
+  }
+
+  // 加载 gapi 并初始化
+  function onGapiLoaded() {
+    gapi.load('client', async () => {
+      try {
+        await initGapiClient();
+        await initDriveExplorer();
+      } catch (err) {
+        console.error('初始化 GAPI 客户端失败:', err);
+        if (treeContainer) {
+          treeContainer.innerHTML = '<p style="color:#ffb3b3;font-size:0.85rem;">初始化 Google API 失败，请检查网络或 API 配置。</p>';
+        }
+      }
+    });
+  }
+
+  // gapi 脚本加载完成后执行
+  if (window.gapi && gapi.load) {
+    onGapiLoaded();
+  } else {
+    window.addEventListener('load', () => {
+      if (window.gapi && gapi.load) {
+        onGapiLoaded();
+      }
+    });
+  }
+})();
+</script>
