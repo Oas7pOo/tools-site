@@ -42,7 +42,7 @@ class DriveExplorer {
       this.isInitialized = true;
     } catch (err) {
       console.error('Drive Explorer 初始化失败:', err);
-      this.showError('初始化失败，请检查网络或 API Key / 共享权限。');
+      this.showError('初始化失败，请使用科学上网工具后重新尝试，或者加群753698934。');
     }
   }
 
