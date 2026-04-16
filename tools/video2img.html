@@ -1,32 +1,33 @@
----
+﻿---
 layout: default
 title: 音频图像转换器 - 冰兔的工具站
 header_title: 音频图像转换器
-header_description: 基于音频频率生成图像，或将频率图像还原为音频的双向转换工具
+header_description: 支持音频转图像与图像还原音频的双向转换
+css_files:
+  - /css/pages/video2img.css
 ---
-
-<h2>音频转图像工具</h2>
-<p>上传音频文件，系统将自动生成对应的频谱图像。图像宽度会根据音频长度自动调整，高度固定为256像素，每个像素代表音频的频率和振幅信息。</p>
+<h2>闊抽杞浘鍍忓伐鍏?/h2>
+<p>涓婁紶闊抽鏂囦欢锛岀郴缁熷皢鑷姩鐢熸垚瀵瑰簲鐨勯璋卞浘鍍忋€傚浘鍍忓搴︿細鏍规嵁闊抽闀垮害鑷姩璋冩暣锛岄珮搴﹀浐瀹氫负256鍍忕礌锛屾瘡涓儚绱犱唬琛ㄩ煶棰戠殑棰戠巼鍜屾尟骞呬俊鎭€?/p>
 <div class="container">
-    <label>上传音频文件：</label>
+    <label>涓婁紶闊抽鏂囦欢锛?/label>
     <input type="file" id="audioInput" accept="audio/*">
     <br><br>
-    <button id="audioToImageButton" class="disable-on-click">生成图像并下载</button>
+    <button id="audioToImageButton" class="disable-on-click">鐢熸垚鍥惧儚骞朵笅杞?/button>
 </div>
 
 <hr>
 
-<h2>图像转音频工具</h2>
-<p>上传由音频生成的频谱图像，系统将自动识别图像宽度来确定音频长度，并还原为WAV格式音频文件。</p>
+<h2>鍥惧儚杞煶棰戝伐鍏?/h2>
+<p>涓婁紶鐢遍煶棰戠敓鎴愮殑棰戣氨鍥惧儚锛岀郴缁熷皢鑷姩璇嗗埆鍥惧儚瀹藉害鏉ョ‘瀹氶煶棰戦暱搴︼紝骞惰繕鍘熶负WAV鏍煎紡闊抽鏂囦欢銆?/p>
 <div class="container">
-    <label>上传频率图像：</label>
+    <label>涓婁紶棰戠巼鍥惧儚锛?/label>
     <input type="file" id="imageInput" accept="image/*">
     <br><br>
-    <button id="imageToAudioButton" class="disable-on-click">还原音频并下载</button>
+    <button id="imageToAudioButton" class="disable-on-click">杩樺師闊抽骞朵笅杞?/button>
 </div>
 
-<div id="preview" style="margin-top: 20px;">
-    <h3>预览区域</h3>
+<div id="preview" class="video-preview">
+    <h3>棰勮鍖哄煙</h3>
     <div id="imagePreview"></div>
     <div id="audioPreview"></div>
 </div>
@@ -49,7 +50,7 @@ document.addEventListener('DOMContentLoaded', function() {
         async audioToImage() {
             const file = document.getElementById('audioInput').files[0];
             if (!file) {
-                alert('请先选择音频文件');
+                alert('璇峰厛閫夋嫨闊抽鏂囦欢');
                 return;
             }
 
@@ -57,7 +58,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const progressBar = document.getElementById('progressBar');
 
             button.disabled = true;
-            button.textContent = '正在处理...';
+            button.textContent = '姝ｅ湪澶勭悊...';
             progressBar.style.display = 'block';
 
             try {
@@ -65,16 +66,16 @@ document.addEventListener('DOMContentLoaded', function() {
                     this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
                 }
 
-                // 解码音频
+                // 瑙ｇ爜闊抽
                 const arrayBuffer = await file.arrayBuffer();
                 const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
 
-                // 获取音频数据 - 如果是立体声，转为单声道
+                // 鑾峰彇闊抽鏁版嵁 - 濡傛灉鏄珛浣撳０锛岃浆涓哄崟澹伴亾
                 let audioData;
                 if (audioBuffer.numberOfChannels === 1) {
                     audioData = audioBuffer.getChannelData(0);
                 } else {
-                    // 立体声转单声道：取平均值
+                    // 绔嬩綋澹拌浆鍗曞０閬擄細鍙栧钩鍧囧€?
                     const left = audioBuffer.getChannelData(0);
                     const right = audioBuffer.getChannelData(1);
                     audioData = new Float32Array(left.length);
@@ -83,24 +84,24 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 }
 
-                // 直接将音频样本数据编码为图像
+                // 鐩存帴灏嗛煶棰戞牱鏈暟鎹紪鐮佷负鍥惧儚
                 const canvas = this.audioDataToImage(audioData, audioBuffer.sampleRate);
 
-                // 显示预览
+                // 鏄剧ず棰勮
                 const audioPreview = document.getElementById('audioPreview');
                 audioPreview.innerHTML = `
-                    <h4>生成的音频图像：</h4>
+                    <h4>鐢熸垚鐨勯煶棰戝浘鍍忥細</h4>
                     ${canvas.outerHTML}
-                    <div style="background: #e3f2fd; padding: 15px; border-radius: 4px; margin: 15px 0;">
-                        <strong>音频信息：</strong><br>
-                        时长: ${audioBuffer.duration.toFixed(3)}秒<br>
-                        采样率: ${audioBuffer.sampleRate}Hz<br>
-                        样本数: ${audioData.length}<br>
-                        图像尺寸: ${canvas.width}×${canvas.height}像素
+                    <div class="video-info-card">
+                        <strong>闊抽淇℃伅锛?/strong><br>
+                        鏃堕暱: ${audioBuffer.duration.toFixed(3)}绉?br>
+                        閲囨牱鐜? ${audioBuffer.sampleRate}Hz<br>
+                        鏍锋湰鏁? ${audioData.length}<br>
+                        鍥惧儚灏哄: ${canvas.width}脳${canvas.height}鍍忕礌
                     </div>
                 `;
 
-                // 自动下载图像
+                // 鑷姩涓嬭浇鍥惧儚
                 canvas.toBlob(function(blob) {
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
@@ -113,21 +114,21 @@ document.addEventListener('DOMContentLoaded', function() {
                 }, 'image/png', 1.0);
 
             } catch (error) {
-                console.error('音频处理错误:', error);
-                alert('音频文件处理失败，请检查文件格式是否支持');
+                console.error('闊抽澶勭悊閿欒:', error);
+                alert('闊抽鏂囦欢澶勭悊澶辫触锛岃妫€鏌ユ枃浠舵牸寮忔槸鍚︽敮鎸?);
             } finally {
                 button.disabled = false;
-                button.textContent = '生成图像并下载';
+                button.textContent = '鐢熸垚鍥惧儚骞朵笅杞?;
                 progressBar.style.display = 'none';
             }
         }
 
-        // 改进的音频数据编码方法，增加更多验证信息
+        // 鏀硅繘鐨勯煶棰戞暟鎹紪鐮佹柟娉曪紝澧炲姞鏇村楠岃瘉淇℃伅
         audioDataToImage(audioData, sampleRate) {
             const length = audioData.length;
             const samplesPerRow = 1000;
             const width = samplesPerRow * 2;
-            const height = Math.ceil(length / samplesPerRow) + 2; // +2行：元数据行和校验行
+            const height = Math.ceil(length / samplesPerRow) + 2; // +2琛岋細鍏冩暟鎹鍜屾牎楠岃
 
             const canvas = document.createElement('canvas');
             canvas.width = width;
@@ -137,10 +138,10 @@ document.addEventListener('DOMContentLoaded', function() {
             const imageData = ctx.createImageData(width, height);
             const data = imageData.data;
 
-            console.log('编码参数:', { length, width, height, sampleRate });
+            console.log('缂栫爜鍙傛暟:', { length, width, height, sampleRate });
 
-            // 第一行：主要元数据
-            // 魔法数字（4字节）- 用于识别格式
+            // 绗竴琛岋細涓昏鍏冩暟鎹?
+            // 榄旀硶鏁板瓧锛?瀛楄妭锛? 鐢ㄤ簬璇嗗埆鏍煎紡
             const magicNumber = 0x41554456; // 'AUDV' in hex
             const magicBytes = new Uint8Array(new Uint32Array([magicNumber]).buffer);
             for (let i = 0; i < 4; i++) {
@@ -151,7 +152,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 data[pixelIndex + 3] = 255;
             }
 
-            // 采样率（4字节）
+            // 閲囨牱鐜囷紙4瀛楄妭锛?
             const sampleRateBytes = new Uint8Array(new Uint32Array([sampleRate]).buffer);
             for (let i = 0; i < 4; i++) {
                 const pixelIndex = (i + 4) * 4;
@@ -161,7 +162,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 data[pixelIndex + 3] = 255;
             }
 
-            // 数据长度（4字节）
+            // 鏁版嵁闀垮害锛?瀛楄妭锛?
             const lengthBytes = new Uint8Array(new Uint32Array([length]).buffer);
             for (let i = 0; i < 4; i++) {
                 const pixelIndex = (i + 8) * 4;
@@ -171,7 +172,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 data[pixelIndex + 3] = 255;
             }
 
-            // 填充剩余第一行
+            // 濉厖鍓╀綑绗竴琛?
             for (let i = 12; i < width; i++) {
                 const pixelIndex = i * 4;
                 data[pixelIndex] = 128;
@@ -180,7 +181,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 data[pixelIndex + 3] = 255;
             }
 
-            // 第二行：校验和和版本信息
+            // 绗簩琛岋細鏍￠獙鍜屽拰鐗堟湰淇℃伅
             let checksum = 0;
             for (let i = 0; i < Math.min(length, 1000); i++) {
                 checksum += Math.abs(audioData[i]);
@@ -196,7 +197,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 data[pixelIndex + 3] = 255;
             }
 
-            // 版本号（1字节）
+            // 鐗堟湰鍙凤紙1瀛楄妭锛?
             const version = 2;
             const pixelIndex = (width + 4) * 4;
             data[pixelIndex] = version;
@@ -204,7 +205,7 @@ document.addEventListener('DOMContentLoaded', function() {
             data[pixelIndex + 2] = version;
             data[pixelIndex + 3] = 255;
 
-            // 填充第二行剩余部分
+            // 濉厖绗簩琛屽墿浣欓儴鍒?
             for (let i = 5; i < width; i++) {
                 const pixelIndex = (width + i) * 4;
                 data[pixelIndex] = 64;
@@ -213,7 +214,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 data[pixelIndex + 3] = 255;
             }
 
-            // 从第三行开始存储音频数据
+            // 浠庣涓夎寮€濮嬪瓨鍌ㄩ煶棰戞暟鎹?
             for (let i = 0; i < length; i++) {
                 const rowIndex = Math.floor(i / samplesPerRow) + 2;
                 const colIndex = (i % samplesPerRow) * 2;
@@ -223,13 +224,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 const intSample = Math.round(sample * 32767);
                 const unsignedSample = intSample + 32768;
 
-                // 存储低8位
+                // 瀛樺偍浣?浣?
                 data[pixelIndex] = unsignedSample & 0xFF;
                 data[pixelIndex + 1] = unsignedSample & 0xFF;
                 data[pixelIndex + 2] = unsignedSample & 0xFF;
                 data[pixelIndex + 3] = 255;
 
-                // 存储高8位
+                // 瀛樺偍楂?浣?
                 if (pixelIndex + 4 < data.length) {
                     data[pixelIndex + 4] = (unsignedSample >> 8) & 0xFF;
                     data[pixelIndex + 5] = (unsignedSample >> 8) & 0xFF;
@@ -245,7 +246,7 @@ document.addEventListener('DOMContentLoaded', function() {
         async imageToAudio() {
             const file = document.getElementById('imageInput').files[0];
             if (!file) {
-                alert('请先选择图像文件');
+                alert('璇峰厛閫夋嫨鍥惧儚鏂囦欢');
                 return;
             }
 
@@ -253,7 +254,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const progressBar = document.getElementById('progressBar');
 
             button.disabled = true;
-            button.textContent = '正在处理...';
+            button.textContent = '姝ｅ湪澶勭悊...';
             progressBar.style.display = 'block';
 
             try {
@@ -268,7 +269,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const result = this.imageToAudioData(imageData);
 
                 if (!result || !result.audioData || result.audioData.length === 0) {
-                    throw new Error('无法从图像中提取有效的音频数据');
+                    throw new Error('鏃犳硶浠庡浘鍍忎腑鎻愬彇鏈夋晥鐨勯煶棰戞暟鎹?);
                 }
 
                 const { audioData, metadata } = result;
@@ -287,14 +288,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 const audioUrl = URL.createObjectURL(wavBlob);
 
                 imagePreview.innerHTML = `
-                    <h4>重建的音频：</h4>
+                    <h4>閲嶅缓鐨勯煶棰戯細</h4>
                     <audio controls src="${audioUrl}"></audio>
-                    <div style="background: #e3f2fd; padding: 15px; border-radius: 4px; margin: 15px 0;">
-                        <strong>音频信息：</strong><br>
-                        时长: ${(audioData.length / sampleRate).toFixed(3)}秒<br>
-                        采样率: ${sampleRate}Hz<br>
-                        样本数: ${audioData.length}<br>
-                        ${metadata.version ? `格式版本: ${metadata.version}` : ''}
+                    <div class="video-info-card">
+                        <strong>闊抽淇℃伅锛?/strong><br>
+                        鏃堕暱: ${(audioData.length / sampleRate).toFixed(3)}绉?br>
+                        閲囨牱鐜? ${sampleRate}Hz<br>
+                        鏍锋湰鏁? ${audioData.length}<br>
+                        ${metadata.version ? `鏍煎紡鐗堟湰: ${metadata.version}` : ''}
                     </div>
                 `;
 
@@ -308,41 +309,41 @@ document.addEventListener('DOMContentLoaded', function() {
                 URL.revokeObjectURL(url);
 
             } catch (error) {
-                console.error('图像转音频错误:', error);
-                // 提供更详细的错误信息和解决方案
-                let errorMessage = '图像处理失败。\n\n可能的原因：\n';
-                if (error.message.includes('魔法数字')) {
-                    errorMessage += '• 这不是由本工具生成的音频图像\n• 请确保上传的是通过"音频转图像"功能生成的PNG文件';
-                } else if (error.message.includes('元数据')) {
-                    errorMessage += '• 图像文件可能已损坏\n• 请重新生成音频图像';
-                } else if (error.message.includes('边界')) {
-                    errorMessage += '• 图像尺寸异常\n• 请检查图像是否完整';
+                console.error('鍥惧儚杞煶棰戦敊璇?', error);
+                // 鎻愪緵鏇磋缁嗙殑閿欒淇℃伅鍜岃В鍐虫柟妗?
+                let errorMessage = '鍥惧儚澶勭悊澶辫触銆俓n\n鍙兘鐨勫師鍥狅細\n';
+                if (error.message.includes('榄旀硶鏁板瓧')) {
+                    errorMessage += '鈥?杩欎笉鏄敱鏈伐鍏风敓鎴愮殑闊抽鍥惧儚\n鈥?璇风‘淇濅笂浼犵殑鏄€氳繃"闊抽杞浘鍍?鍔熻兘鐢熸垚鐨凱NG鏂囦欢';
+                } else if (error.message.includes('鍏冩暟鎹?)) {
+                    errorMessage += '鈥?鍥惧儚鏂囦欢鍙兘宸叉崯鍧廫n鈥?璇烽噸鏂扮敓鎴愰煶棰戝浘鍍?;
+                } else if (error.message.includes('杈圭晫')) {
+                    errorMessage += '鈥?鍥惧儚灏哄寮傚父\n鈥?璇锋鏌ュ浘鍍忔槸鍚﹀畬鏁?;
                 } else {
-                    errorMessage += '• 图像格式不支持或文件已损坏\n• 请确保上传PNG格式的音频图像\n• 如果问题持续，请重新生成音频图像';
+                    errorMessage += '鈥?鍥惧儚鏍煎紡涓嶆敮鎸佹垨鏂囦欢宸叉崯鍧廫n鈥?璇风‘淇濅笂浼燩NG鏍煎紡鐨勯煶棰戝浘鍍廫n鈥?濡傛灉闂鎸佺画锛岃閲嶆柊鐢熸垚闊抽鍥惧儚';
                 }
                 alert(errorMessage);
             } finally {
                 button.disabled = false;
-                button.textContent = '还原音频并下载';
+                button.textContent = '杩樺師闊抽骞朵笅杞?;
                 progressBar.style.display = 'none';
             }
         }
 
-        // 改进的图像解码方法，增加多重验证和容错处理
+        // 鏀硅繘鐨勫浘鍍忚В鐮佹柟娉曪紝澧炲姞澶氶噸楠岃瘉鍜屽閿欏鐞?
         imageToAudioData(imageData) {
             const data = imageData.data;
             const width = imageData.width;
             const height = imageData.height;
 
-            console.log('开始解码，图像尺寸:', width, 'x', height);
+            console.log('寮€濮嬭В鐮侊紝鍥惧儚灏哄:', width, 'x', height);
 
             try {
-                // 检查图像尺寸
+                // 妫€鏌ュ浘鍍忓昂瀵?
                 if (width < 24 || height < 3) {
-                    throw new Error('图像尺寸过小，不是有效的音频图像');
+                    throw new Error('鍥惧儚灏哄杩囧皬锛屼笉鏄湁鏁堢殑闊抽鍥惧儚');
                 }
 
-                // 验证魔法数字
+                // 楠岃瘉榄旀硶鏁板瓧
                 const magicBytes = new Uint8Array(4);
                 for (let i = 0; i < 4; i++) {
                     const pixelIndex = i * 4;
@@ -350,11 +351,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 const magicNumber = new Uint32Array(magicBytes.buffer)[0];
 
-                // 尝试多种格式
+                // 灏濊瘯澶氱鏍煎紡
                 let isNewFormat = (magicNumber === 0x41554456); // 'AUDV'
                 let isOldFormat = false;
 
-                // 检查旧格式（标识符为170）
+                // 妫€鏌ユ棫鏍煎紡锛堟爣璇嗙涓?70锛?
                 if (!isNewFormat) {
                     let oldFormatCount = 0;
                     for (let i = 8; i < Math.min(20, width); i++) {
@@ -367,17 +368,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
 
                 if (!isNewFormat && !isOldFormat) {
-                    throw new Error('不是有效的音频图像格式。请确保上传的是通过本工具生成的PNG图像。');
+                    throw new Error('涓嶆槸鏈夋晥鐨勯煶棰戝浘鍍忔牸寮忋€傝纭繚涓婁紶鐨勬槸閫氳繃鏈伐鍏风敓鎴愮殑PNG鍥惧儚銆?);
                 }
 
                 let sampleRate, dataLength, version = 1;
                 let dataStartRow = 1;
 
                 if (isNewFormat) {
-                    console.log('检测到新格式（v2）');
+                    console.log('妫€娴嬪埌鏂版牸寮忥紙v2锛?);
                     dataStartRow = 2;
 
-                    // 解码采样率
+                    // 瑙ｇ爜閲囨牱鐜?
                     const sampleRateBytes = new Uint8Array(4);
                     for (let i = 0; i < 4; i++) {
                         const pixelIndex = (i + 4) * 4;
@@ -385,7 +386,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                     sampleRate = new Uint32Array(sampleRateBytes.buffer)[0];
 
-                    // 解码数据长度
+                    // 瑙ｇ爜鏁版嵁闀垮害
                     const lengthBytes = new Uint8Array(4);
                     for (let i = 0; i < 4; i++) {
                         const pixelIndex = (i + 8) * 4;
@@ -393,17 +394,17 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                     dataLength = new Uint32Array(lengthBytes.buffer)[0];
 
-                    // 获取版本号
+                    // 鑾峰彇鐗堟湰鍙?
                     const versionPixelIndex = (width + 4) * 4;
                     if (versionPixelIndex < data.length) {
                         version = data[versionPixelIndex];
                     }
 
                 } else {
-                    console.log('检测到旧格式（v1）');
+                    console.log('妫€娴嬪埌鏃ф牸寮忥紙v1锛?);
                     dataStartRow = 1;
 
-                    // 旧格式解码
+                    // 鏃ф牸寮忚В鐮?
                     const sampleRateBytes = new Uint8Array(4);
                     for (let i = 0; i < 4; i++) {
                         const pixelIndex = i * 4;
@@ -419,31 +420,31 @@ document.addEventListener('DOMContentLoaded', function() {
                     dataLength = new Uint32Array(lengthBytes.buffer)[0];
                 }
 
-                console.log('解码的元数据:', { sampleRate, dataLength, version });
+                console.log('瑙ｇ爜鐨勫厓鏁版嵁:', { sampleRate, dataLength, version });
 
-                // 验证元数据合理性，但更宽松
+                // 楠岃瘉鍏冩暟鎹悎鐞嗘€э紝浣嗘洿瀹芥澗
                 if (sampleRate <= 0 || sampleRate > 192000) {
-                    console.warn('采样率异常，使用默认值44100Hz');
+                    console.warn('閲囨牱鐜囧紓甯革紝浣跨敤榛樿鍊?4100Hz');
                     sampleRate = 44100;
                 }
 
-                if (dataLength <= 0 || dataLength > 50000000) { // 增加最大限制
-                    throw new Error(`数据长度异常: ${dataLength}`);
+                if (dataLength <= 0 || dataLength > 50000000) { // 澧炲姞鏈€澶ч檺鍒?
+                    throw new Error(`鏁版嵁闀垮害寮傚父: ${dataLength}`);
                 }
 
                 const audioData = [];
                 const samplesPerRow = 1000;
                 let successfulSamples = 0;
 
-                // 解码音频数据，增加错误恢复
+                // 瑙ｇ爜闊抽鏁版嵁锛屽鍔犻敊璇仮澶?
                 for (let i = 0; i < dataLength; i++) {
                     const rowIndex = Math.floor(i / samplesPerRow) + dataStartRow;
                     const colIndex = (i % samplesPerRow) * 2;
                     const pixelIndex = (rowIndex * width + colIndex) * 4;
 
-                    // 检查边界，但继续处理
+                    // 妫€鏌ヨ竟鐣岋紝浣嗙户缁鐞?
                     if (pixelIndex + 7 >= data.length) {
-                        console.warn(`到达图像边界，样本 ${i}/${dataLength}`);
+                        console.warn(`鍒拌揪鍥惧儚杈圭晫锛屾牱鏈?${i}/${dataLength}`);
                         break;
                     }
 
@@ -457,20 +458,20 @@ document.addEventListener('DOMContentLoaded', function() {
                         audioData.push(floatSample);
                         successfulSamples++;
                     } catch (e) {
-                        console.warn(`样本 ${i} 解码失败，使用静音`);
+                        console.warn(`鏍锋湰 ${i} 瑙ｇ爜澶辫触锛屼娇鐢ㄩ潤闊砢);
                         audioData.push(0);
                     }
                 }
 
-                console.log(`解码完成，成功解码 ${successfulSamples}/${dataLength} 个样本`);
+                console.log(`瑙ｇ爜瀹屾垚锛屾垚鍔熻В鐮?${successfulSamples}/${dataLength} 涓牱鏈琡);
 
                 if (audioData.length === 0) {
-                    throw new Error('没有找到有效的音频数据');
+                    throw new Error('娌℃湁鎵惧埌鏈夋晥鐨勯煶棰戞暟鎹?);
                 }
 
-                // 如果样本数少于预期，进行警告但继续处理
+                // 濡傛灉鏍锋湰鏁板皯浜庨鏈燂紝杩涜璀﹀憡浣嗙户缁鐞?
                 if (audioData.length < dataLength * 0.8) {
-                    console.warn(`只成功解码了 ${audioData.length}/${dataLength} 个样本`);
+                    console.warn(`鍙垚鍔熻В鐮佷簡 ${audioData.length}/${dataLength} 涓牱鏈琡);
                 }
 
                 return {
@@ -483,7 +484,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 };
 
             } catch (error) {
-                console.error('解码过程出错:', error);
+                console.error('瑙ｇ爜杩囩▼鍑洪敊:', error);
                 throw error;
             }
         }
@@ -497,7 +498,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 };
                 img.onerror = () => {
                     URL.revokeObjectURL(img.src);
-                    reject(new Error('图像加载失败，请检查文件格式'));
+                    reject(new Error('鍥惧儚鍔犺浇澶辫触锛岃妫€鏌ユ枃浠舵牸寮?));
                 };
                 img.src = URL.createObjectURL(file);
             });
@@ -543,3 +544,7 @@ document.addEventListener('DOMContentLoaded', function() {
     new LosslessAudioImageConverter();
 });
 </script>
+
+
+
+

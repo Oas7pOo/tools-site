@@ -1,14 +1,13 @@
----
+﻿---
 layout: default
 title: 猫猫头翻译组
 header_title: 猫猫头翻译组
-header_description: 猫猫头翻译组的在线资料小窝，把世界各地乱蹦乱跳的文本叼回来翻译成乖乖躺好的文档。
+header_description: 猫猫头翻译组在线资料导航
 permalink: /pdf/pdf.html
+css_files:
+  - /css/drive-explorer.css
+  - /css/pages/pdf.css
 ---
-
-<!-- Drive Explorer 专用样式 -->
-<link rel="stylesheet" href="{{ '/css/drive-explorer.css' | relative_url }}">
-
 <div class="drive-explorer-container">
   <section class="drive-explorer-main">
     <div class="drive-viewer-header">
@@ -17,56 +16,52 @@ permalink: /pdf/pdf.html
         <div id="currentFilePath" class="drive-current-path"></div>
       </div>
       <div class="drive-viewer-actions">
-        <!-- 返回列表（只在预览模式下显示） -->
+        <!-- 返回列表（仅在预览模式下显示）-->
         <button id="backToList"
                 type="button"
-                class="drive-btn"
-                style="display:none;">
+                class="drive-btn is-hidden">
           返回文件列表
         </button>
 
-        <!-- 单个文件下载按钮（普通文件直接下载，在线文档跳转查看） -->
+        <!-- 单个文件下载按钮（普通文件直接下载，在线文档跳转查看）-->
         <a id="downloadFile"
            href="#"
-           class="drive-btn"
-           style="display:none;"
+           class="drive-btn is-hidden"
            target="_blank"
            rel="noopener"
            download>
           下载文件
         </a>
 
-        <!-- 文件 / 文件夹 在 Drive 中打开（用于整夹下载、在线文档、查看 PDF 书签） -->
+        <!-- 文件 / 文件夹 在 Drive 中打开（用于整包下载、在线文档、查看 PDF 书签）-->
         <a id="openInDrive"
            href="#"
            target="_blank"
            rel="noopener"
-           class="drive-btn"
-           style="display:none;">
+           class="drive-btn is-hidden">
           在 Google Drive 中打开
         </a>
       </div>
     </div>
 
-    <!-- 面包屑路径（点击上级即可回到文件列表） -->
+    <!-- 面包屑导航（点击上级键可回到文件列表）-->
     <div id="driveBreadcrumb" class="drive-breadcrumb"></div>
 
-    <!-- 当前文件夹中的 “文件夹 + 文件” 网格 -->
+    <!-- 当前文件夹中的“文件夹 + 文件”网格 -->
     <div id="driveFileGrid" class="drive-file-grid">
       <p class="drive-loading">正在从 Google Drive 加载目录...</p>
     </div>
 
-    <!-- 底部大号预览区域 -->
+    <!-- 底部大框预览区域 -->
     <div class="drive-viewer-body">
       <iframe id="filePreviewFrame"
               src=""
               frameborder="0"
-              class="drive-preview-frame"
-              style="display:none;"></iframe>
+              class="drive-preview-frame is-hidden"></iframe>
       <div id="filePreviewFallback" class="drive-preview-fallback">
         <p>在上面的文件网格中点击任意文件即可在此处预览。</p>
         <p class="small">
-          如果需要查看 PDF 的书签 / 章节目录，可以点击右上角「在 Google Drive 中打开」，使用 Drive 自带阅读器。
+          如果需要查看 PDF 的书签 / 章节目录，可以点击右上角“在 Google Drive 中打开”，使用 Drive 自带阅读器。
         </p>
       </div>
     </div>
@@ -97,3 +92,13 @@ permalink: /pdf/pdf.html
   });
 })();
 </script>
+
+
+
+
+
+
+
+
+
+

@@ -1,48 +1,49 @@
----
+﻿---
 layout: default
 title: 文本转01字符串 - 冰兔的工具站
 header_title: 文本转01字符串
-header_description: 将文本（中英符号均可）转为01二进制字符串或条形码，或上传条码图片/01串直接还原为原文
+header_description: 将文本转换为 01 二进制字符串或条形码，并支持从图片还原文本
+css_files:
+  - /css/pages/binary-barcode.css
 ---
-
-<h2>文本转条码/01字符串工具</h2>
+<h2>鏂囨湰杞潯鐮?01瀛楃涓插伐鍏?/h2>
 <div class="container">
-    <label for="txtInput">请输入文本内容（支持中文、英文、数字、符号等）：</label>
-    <textarea id="txtInput" rows="4" style="width: 100%;"></textarea>
-    <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-      <button onclick="convertToBin()" class="disable-on-click">转换为01字符串</button>
-      <button onclick="showBarcodeFromText()" class="disable-on-click">将文字转换为条形码</button>
-      <button id="downloadBarcodeBtn" style="display:none;">下载条形码PNG</button>
+    <label for="txtInput">璇疯緭鍏ユ枃鏈唴瀹癸紙鏀寔涓枃銆佽嫳鏂囥€佹暟瀛椼€佺鍙风瓑锛夛細</label>
+    <textarea id="txtInput" rows="4" class="is-full-width"></textarea>
+    <div class="binary-action-row">
+      <button onclick="convertToBin()" class="disable-on-click">杞崲涓?1瀛楃涓?/button>
+      <button onclick="showBarcodeFromText()" class="disable-on-click">灏嗘枃瀛楄浆鎹负鏉″舰鐮?/button>
+      <button id="downloadBarcodeBtn" class="is-hidden">涓嬭浇鏉″舰鐮丳NG</button>
     </div>
-    <label for="binOutput" style="margin-top:15px;">转换结果（每8位一组）：</label>
-    <textarea id="binOutput" rows="4" style="width: 100%;" readonly></textarea>
-    <div id="barcodeArea" style="margin-top:18px;">
-        <label style="display:block;">条形码预览：</label>
+    <label for="binOutput" class="binary-label-top">杞崲缁撴灉锛堟瘡8浣嶄竴缁勶級锛?/label>
+    <textarea id="binOutput" rows="4" class="is-full-width" readonly></textarea>
+    <div id="barcodeArea" class="binary-barcode-area">
+        <label class="binary-block-label">鏉″舰鐮侀瑙堬細</label>
         <svg id="barcodeSvg"></svg>
-        <canvas id="barcodeCanvas" width="360" height="90" style="display:none;"></canvas>
+        <canvas id="barcodeCanvas" width="360" height="90" class="is-hidden"></canvas>
     </div>
 </div>
 
 <hr>
-<h2>上传条形码图片/输入01字符串还原文本</h2>
+<h2>涓婁紶鏉″舰鐮佸浘鐗?杈撳叆01瀛楃涓茶繕鍘熸枃鏈?/h2>
 <div class="container">
-    <label for="inputArea">请输入<b>01字符串</b>或<b>条形码Base64内容</b>：</label>
-    <textarea id="inputArea" rows="4" style="width: 100%;"></textarea>
-    <button onclick="convertInputToText()" class="disable-on-click" style="margin-top:10px;">还原为原文</button>
-    <label style="display:block;margin:15px 0 5px 0;">或上传png图片文件：</label>
+    <label for="inputArea">璇疯緭鍏?b>01瀛楃涓?/b>鎴?b>鏉″舰鐮丅ase64鍐呭</b>锛?/label>
+    <textarea id="inputArea" rows="4" class="is-full-width"></textarea>
+    <button onclick="convertInputToText()" class="disable-on-click binary-btn-top">杩樺師涓哄師鏂?/button>
+    <label class="binary-upload-label">鎴栦笂浼爌ng鍥剧墖鏂囦欢锛?/label>
     <input type="file" id="imageInput" accept=".png,.jpg,.jpeg,.webp">
-    <button onclick="decodeBarcodeImage()" class="disable-on-click" style="margin-top:10px;">读取图片条形码并还原为原文</button>
-    <label for="textOutput" style="margin-top:15px;">还原结果：</label>
-    <textarea id="textOutput" rows="4" style="width: 100%;" readonly></textarea>
+    <button onclick="decodeBarcodeImage()" class="disable-on-click binary-btn-top">璇诲彇鍥剧墖鏉″舰鐮佸苟杩樺師涓哄師鏂?/button>
+    <label for="textOutput" class="binary-label-top">杩樺師缁撴灉锛?/label>
+    <textarea id="textOutput" rows="4" class="is-full-width" readonly></textarea>
 </div>
 
-<!-- JsBarcode 条码生成库 -->
+<!-- JsBarcode 鏉＄爜鐢熸垚搴?-->
 <script src="../js/JsBarcode.all.min.js"></script>
-<!-- ZXing-js 条码识别库 -->
+<!-- ZXing-js 鏉＄爜璇嗗埆搴?-->
 <script src="../js/zxing-js.umd.min.js"></script>
 //https://unpkg.com/@zxing/library@latest/umd/index.min.js
 <script>
-// 文本转01字符串
+// 鏂囨湰杞?1瀛楃涓?
 window.convertToBin = function() {
     const text = document.getElementById('txtInput').value;
     if (!text) {
@@ -58,7 +59,7 @@ window.convertToBin = function() {
     document.getElementById('binOutput').value = arr.join(' ');
 }
 
-// 二进制字符串 → Base64
+// 浜岃繘鍒跺瓧绗︿覆 鈫?Base64
 function binToBase64(binStr) {
     binStr = binStr.replace(/\s+/g, '');
     if (binStr.length % 8 !== 0) binStr = binStr.padEnd(Math.ceil(binStr.length/8)*8, '0');
@@ -72,7 +73,7 @@ function binToBase64(binStr) {
     return btoa(binStrRaw);
 }
 
-// Base64 → 二进制字符串
+// Base64 鈫?浜岃繘鍒跺瓧绗︿覆
 function base64ToBin(base64) {
     try {
         let str = atob(base64.trim());
@@ -86,7 +87,7 @@ function base64ToBin(base64) {
     }
 }
 
-// 用原始文本生成条形码（内容为Base64，底部显示原文）并支持PNG下载
+// 鐢ㄥ師濮嬫枃鏈敓鎴愭潯褰㈢爜锛堝唴瀹逛负Base64锛屽簳閮ㄦ樉绀哄師鏂囷級骞舵敮鎸丳NG涓嬭浇
 window.showBarcodeFromText = function() {
     const text = document.getElementById('txtInput').value;
     const svg = document.getElementById('barcodeSvg');
@@ -97,7 +98,7 @@ window.showBarcodeFromText = function() {
         downloadBtn.style.display = 'none';
         return;
     }
-    // 转成01，再Base64压缩
+    // 杞垚01锛屽啀Base64鍘嬬缉
     const encoder = new TextEncoder();
     const bytes = encoder.encode(text);
     let binStr = '';
@@ -105,7 +106,7 @@ window.showBarcodeFromText = function() {
     let base64 = binToBase64(binStr);
 
     try {
-        // 绘制到SVG
+        // 缁樺埗鍒癝VG
         JsBarcode(svg, base64, {
             format: "CODE128",
             lineColor: "#222",
@@ -117,7 +118,7 @@ window.showBarcodeFromText = function() {
             textMargin: 8,
             margin: 10,
         });
-        // SVG转Canvas再转PNG，供下载
+        // SVG杞珻anvas鍐嶈浆PNG锛屼緵涓嬭浇
         const xml = new XMLSerializer().serializeToString(svg);
         const DOMURL = window.URL || window.webkitURL || window;
         const img = new window.Image();
@@ -130,7 +131,7 @@ window.showBarcodeFromText = function() {
             const ctx = canvas.getContext('2d');
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.drawImage(img, 0, 0);
-            // 生成PNG并绑定下载
+            // 鐢熸垚PNG骞剁粦瀹氫笅杞?
             canvas.toBlob(function(blob) {
                 downloadBtn.style.display = '';
                 downloadBtn.onclick = function() {
@@ -149,12 +150,12 @@ window.showBarcodeFromText = function() {
         };
         img.src = url;
     } catch (e) {
-        svg.innerHTML = '<text x="10" y="40" fill="red">条形码生成失败</text>';
+        svg.innerHTML = '<text x="10" y="40" fill="red">鏉″舰鐮佺敓鎴愬け璐?/text>';
         downloadBtn.style.display = 'none';
     }
 }
 
-// 01字符串/Base64 → 原文
+// 01瀛楃涓?Base64 鈫?鍘熸枃
 window.convertInputToText = function() {
     let input = document.getElementById('inputArea').value.trim();
     let output = '';
@@ -163,16 +164,16 @@ window.convertInputToText = function() {
         out.value = '';
         return;
     }
-    // 先判断是不是01串
+    // 鍏堝垽鏂槸涓嶆槸01涓?
     let binStr = '';
     if (/^[01\s]+$/.test(input) && input.replace(/\s/g,'').length % 8 === 0) {
-        // 01字符串
+        // 01瀛楃涓?
         binStr = input.replace(/\s+/g, '');
     } else {
-        // 尝试Base64
+        // 灏濊瘯Base64
         binStr = base64ToBin(input);
         if (!binStr) {
-            out.value = '输入内容格式不正确，无法还原。';
+            out.value = '杈撳叆鍐呭鏍煎紡涓嶆纭紝鏃犳硶杩樺師銆?;
             return;
         }
     }
@@ -186,17 +187,17 @@ window.convertInputToText = function() {
         output = decoder.decode(arr);
         out.value = output;
     } catch (e) {
-        out.value = '解码失败：输入内容可能有误。';
+        out.value = '瑙ｇ爜澶辫触锛氳緭鍏ュ唴瀹瑰彲鑳芥湁璇€?;
     }
 }
 
-// 上传图片条形码 → 还原为原文（自动Base64/01两种方式还原）
+// 涓婁紶鍥剧墖鏉″舰鐮?鈫?杩樺師涓哄師鏂囷紙鑷姩Base64/01涓ょ鏂瑰紡杩樺師锛?
 window.decodeBarcodeImage = function() {
     const input = document.getElementById('imageInput');
     const out = document.getElementById('textOutput');
     out.value = '';
     if (!input.files.length) {
-        alert("请上传图片");
+        alert("璇蜂笂浼犲浘鐗?);
         return;
     }
     const file = input.files[0];
@@ -206,26 +207,26 @@ window.decodeBarcodeImage = function() {
         const codeReader = new ZXing.BrowserBarcodeReader();
         codeReader.decodeFromImageElement(img).then(result => {
             let codeText = result.text.trim();
-            // 先尝试base64方式还原
+            // 鍏堝皾璇昩ase64鏂瑰紡杩樺師
             let originText = tryBase64ToUtf8(codeText);
             if (originText !== null) {
                 out.value = originText;
             } else if (/^[01\s]+$/.test(codeText) && codeText.replace(/\s/g,'').length % 8 === 0) {
-                // 若条码内容为 01串，则先转byte再转文本
+                // 鑻ユ潯鐮佸唴瀹逛负 01涓诧紝鍒欏厛杞琤yte鍐嶈浆鏂囨湰
                 out.value = binToText(codeText);
             } else {
-                out.value = codeText; // 直接输出
+                out.value = codeText; // 鐩存帴杈撳嚭
             }
         }).catch(err => {
-            out.value = "条码识别失败：" + (err && err.message ? err.message : err);
+            out.value = "鏉＄爜璇嗗埆澶辫触锛? + (err && err.message ? err.message : err);
         });
     };
     img.onerror = function() {
-        out.value = "图片加载失败。";
+        out.value = "鍥剧墖鍔犺浇澶辫触銆?;
     };
     img.src = imgURL;
 };
-// base64解码为utf8文本，解码失败则返回null
+// base64瑙ｇ爜涓簎tf8鏂囨湰锛岃В鐮佸け璐ュ垯杩斿洖null
 function tryBase64ToUtf8(base64) {
     try {
         let binStr = atob(base64);
@@ -238,7 +239,7 @@ function tryBase64ToUtf8(base64) {
         return null;
     }
 }
-// 01串转为文本
+// 01涓茶浆涓烘枃鏈?
 function binToText(binStr) {
     binStr = binStr.replace(/\s+/g, '');
     if (binStr.length % 8 !== 0) return '';
@@ -249,3 +250,8 @@ function binToText(binStr) {
     return new TextDecoder().decode(new Uint8Array(bytes));
 }
 </script>
+
+
+
+
+

@@ -1,0 +1,6 @@
+﻿.low-preview-canvas {
+  display: none;
+  max-width: 100%;
+  height: auto;
+  border: 1px solid #ccc;
+}

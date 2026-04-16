@@ -501,6 +501,15 @@ p {
   border: 0;
 }
 
+/* 通用工具类 */
+.is-hidden {
+  display: none;
+}
+
+.is-full-width {
+  width: 100%;
+}
+
 /* 动画效果 */
 @keyframes fadeIn {
   from {

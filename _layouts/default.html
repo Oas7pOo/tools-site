@@ -9,7 +9,11 @@
   <!-- 引入 CSS -->
   <link rel="stylesheet" href="{{ '/css/style.css' | relative_url }}">
   <link rel="stylesheet" href="{{ '/css/tool_common.css' | relative_url }}">
-
+  {% if page.css_files %}
+    {% for css_file in page.css_files %}
+      <link rel="stylesheet" href="{{ css_file | relative_url }}">
+    {% endfor %}
+  {% endif %}
 </head>
 
 

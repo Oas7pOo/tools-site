@@ -1,24 +1,25 @@
----
+﻿---
 layout: default
 title: 盲水印 - 冰兔的工具站
 header_title: 盲水印工具
-header_description: 采用改进的数字水印算法，提供更可靠的图像水印嵌入与提取功能
+header_description: 采用改进的数字水印算法，提供图像水印嵌入与提取功能
+css_files:
+  - /css/pages/blind-watermark.css
 ---
-
-<h2>盲水印/隐藏水印加密工具</h2>
-<p>上传图片，通过<strong>单层 DWT 小波域扩频</strong>+伪随机同步模板，生成对裁切、旋转、拍屏也非常鲁棒的水印图像。</p>
+<h2>盲水印 - 隐藏水印加密工具</h2>
+<p>上传图片，通过<strong>单层 DWT 小波域扩频</strong>+伪随机同步模板，生成对裁切、旋转、截图也非常鲁棒的水印图像。</p>
 
 <h2>盲水印加密</h2>
 <div class="container">
-    <label>上传图片（JPG/PNG/WebP等）：</label>
+    <label>上传图片（JPG/PNG/WebP 等）：</label>
     <input type="file" id="mediaInput" accept="image/*">
     <br>
-    <label>上传水印图片（自动转换为64x64黑白）：</label>
+    <label>上传水印图片（自动转换为 64x64 黑白）：</label>
     <input type="file" id="watermarkImageInput" accept="image/*">
     <label>或输入水印文字：</label>
     <textarea id="watermarkText" placeholder="输入水印文本，将被嵌入到图像中"></textarea>
     <br>
-    <div id="watermarkPreview" style="margin: 10px 0;"></div>
+    <div id="watermarkPreview" class="wm-preview"></div>
     <label>设置密码（可选，增强安全性）：</label>
     <input type="text" id="password" placeholder="请输入密码，建议使用强密码">
     <br>
@@ -29,16 +30,16 @@ header_description: 采用改进的数字水印算法，提供更可靠的图像
 
 <h2>盲水印解密工具</h2>
 <div class="container">
-    <label>上传带水印的图片（PNG/JPG/WebP等）：</label>
+    <label>上传带水印的图片（PNG/JPG/WebP 等）：</label>
     <input type="file" id="encodedMediaInput" accept="image/*">
     <br>
     <div class="form-group">
     <label>选择水印类型：</label>
     <div>
         <input type="radio" id="textWatermark" name="wmType" value="text" checked>
-        <label for="textWatermark" style="display:inline">文字水印</label>
+        <label for="textWatermark" class="wm-inline-label">文字水印</label>
         <input type="radio" id="imageWatermark" name="wmType" value="image">
-        <label for="imageWatermark" style="display:inline">图像水印（64x64）</label>
+        <label for="imageWatermark" class="wm-inline-label">图像水印（64x64）</label>
     </div>
     </div>
     <label>输入密码（加密时设置的密码）：</label>
@@ -245,7 +246,7 @@ header_description: 采用改进的数字水印算法，提供更可靠的图像
             });
         }
 
-        // ===== 文字 <-> bit 流（带魔数 + 长度 + 校验） =====
+        // ===== 文字 <-> bit 流（带魔数 + 长度 + 校验）=====
         textToWatermarkData(text) {
             const totalBits  = this.WATERMARK_SIZE * this.WATERMARK_SIZE; // 4096
             const headerBits = 16 + 16 + 16; // magic + length + checksum
@@ -338,7 +339,7 @@ header_description: 采用改进的数字水印算法，提供更可靠的图像
             return valid ? text : "";
         }
 
-        // ===== 几何变换（仅用于解码） =====
+        // ===== 几何变换（仅用于解码）=====
         applyTransform(imageInfo, transform) {
             if (transform === 'none') return imageInfo;
 
@@ -386,7 +387,7 @@ header_description: 采用改进的数字水印算法，提供更可靠的图像
             };
         }
 
-        // ===== 嵌入（冗余编码） =====
+        // ===== 嵌入（冗余编码）=====
         async embedWatermark(imageInfo, watermarkBits, password) {
             const seed = this.generateSeed(password);
             const prng = this.createPRNG(seed);
@@ -425,7 +426,7 @@ header_description: 采用改进的数字水印算法，提供更可靠的图像
 
             let effectiveBits = Math.min(bitsToUse, totalBlocks);
             if (!Number.isFinite(effectiveBits) || effectiveBits <= 0) {
-                throw new Error('图片块数不足以嵌入任何水印位');
+                throw new Error('图片块数不足，无法嵌入任何水印位');
             }
 
             let repeats = Math.floor(totalBlocks / effectiveBits);
@@ -778,7 +779,7 @@ header_description: 采用改进的数字水印算法，提供更可靠的图像
                 !passwordInput || !encodedMediaInput || !decodePasswordInput ||
                 !encryptButton || !decryptButton || !resultDiv) {
                 console.error('[BlindWatermark] 必要的 DOM 元素缺失');
-                alert('盲水印脚本初始化失败：页面上有必要的元素缺失，请检查 id 是否一致');
+                alert('盲水印脚本初始化失败：页面上缺少必要的元素，请检查 id 是否一致');
                 return;
             }
 
@@ -796,14 +797,14 @@ header_description: 采用改进的数字水印算法，提供更可靠的图像
                     const capacityBytes = Math.floor((totalBits - headerBits) / 8);
 
                     const textDiv = document.createElement('div');
-                    textDiv.style.cssText = 'background:#f5f5f5;padding:10px;border-radius:5px;margin:10px 0;font-family:monospace;';
+                    textDiv.className = 'wm-text-preview-card';
                     textDiv.innerHTML =
                         '<strong>文字水印预览:</strong><br>' +
                         '原文: "' + data.replace(/</g, '&lt;') + '"<br>' +
-                        '<small style="color:#666;">' +
-                        '预计 UTF-8 字节数: ' + bytes.length + '<br>' +
-                        '最大可嵌入字节数: ' + capacityBytes + '（超过部分将被截断）<br>' +
-                        '水印平面: ' + blindWatermark.WATERMARK_SIZE + 'x' + blindWatermark.WATERMARK_SIZE +
+                        '<small class="wm-text-stats">' +
+                        '预计 UTF-8 字节数：' + bytes.length + '<br>' +
+                        '最大可嵌入字节数：' + capacityBytes + '（超出部分将被截断）<br>' +
+                        '水印平面：' + blindWatermark.WATERMARK_SIZE + 'x' + blindWatermark.WATERMARK_SIZE +
                         ' = ' + totalBits + ' bits' +
                         '</small>';
                     previewDiv.appendChild(textDiv);
@@ -813,7 +814,7 @@ header_description: 采用改进的数字水印算法，提供更可靠的图像
                 const canvas = document.createElement('canvas');
                 canvas.width  = blindWatermark.WATERMARK_SIZE;
                 canvas.height = blindWatermark.WATERMARK_SIZE;
-                canvas.style.cssText = 'border:1px solid #ddd;margin:10px 0;max-width:128px;max-height:128px;';
+                canvas.className = 'wm-preview-canvas';
                 const ctx = canvas.getContext('2d');
                 const imageData = ctx.createImageData(blindWatermark.WATERMARK_SIZE, blindWatermark.WATERMARK_SIZE);
 
@@ -827,9 +828,8 @@ header_description: 采用改进的数字水印算法，提供更可靠的图像
                 ctx.putImageData(imageData, 0, 0);
 
                 const label = document.createElement('div');
-                label.textContent = '水印预览 (' + blindWatermark.WATERMARK_SIZE + 'x' + blindWatermark.WATERMARK_SIZE + ' 黑白):';
-                label.style.fontWeight   = 'bold';
-                label.style.marginBottom = '10px';
+                label.textContent = '水印预览（' + blindWatermark.WATERMARK_SIZE + 'x' + blindWatermark.WATERMARK_SIZE + ' 黑白）：';
+                label.className = 'wm-preview-label';
 
                 previewDiv.appendChild(label);
                 previewDiv.appendChild(canvas);
@@ -956,15 +956,15 @@ header_description: 采用改进的数字水印算法，提供更可靠的图像
                     if (isText) {
                         const text = result.text || '';
                         resultDiv.innerHTML =
-                            '<div style="background:#f5f5f5;padding:15px;border-radius:5px;">' +
+                            '<div class="wm-result-card">' +
                             '<strong>提取的文字水印：</strong><br>' +
-                            '<div style="font-family:monospace;background:white;padding:10px;border-radius:3px;margin-top:10px;min-height:30px;word-break:break-all;">' +
+                            '<div class="wm-result-content">' +
                             (text || '(提取失败或水印为空)') +
                             '</div>' +
-                            '<small style="color:#666;margin-top:10px;display:block;">' +
-                            '提取状态: ' + (result.valid && text ? '成功' : '失败') +
-                            ' | 字符数: ' + text.length +
-                            ' | 使用变换: ' + result.transform +
+                            '<small class="wm-result-meta">' +
+                            '提取状态：' + (result.valid && text ? '成功' : '失败') +
+                            ' | 字符数：' + text.length +
+                            ' | 使用变换：' + result.transform +
                             '</small>' +
                             '</div>';
 
@@ -994,9 +994,9 @@ header_description: 采用改进的数字水印算法，提供更可靠的图像
                         ctx.putImageData(imgData, 0, 0);
 
                         resultDiv.innerHTML =
-                            '<div style="background:#f5f5f5;padding:15px;border-radius:5px;">' +
-                            '<strong>提取的图像水印 (' + blindWatermark.WATERMARK_SIZE + 'x' +
-                            blindWatermark.WATERMARK_SIZE + ')：</strong><br>' +
+                            '<div class="wm-result-card">' +
+                            '<strong>提取的图像水印（' + blindWatermark.WATERMARK_SIZE + 'x' +
+                            blindWatermark.WATERMARK_SIZE + '）：</strong><br>' +
                             '</div>';
                         const container = resultDiv.querySelector('div');
                         container.appendChild(canvas);
@@ -1042,9 +1042,12 @@ header_description: 采用改进的数字水印算法，提供更可靠的图像
 
             console.log('[BlindWatermark] 初始化完成');
         } catch (e) {
-            console.error('[BlindWatermark] 初始化失败:', e);
+            console.error('[BlindWatermark] 初始化失败', e);
             alert('盲水印脚本初始化失败：' + (e && e.message ? e.message : e));
         }
     });
 })();
 </script>
+
+
+

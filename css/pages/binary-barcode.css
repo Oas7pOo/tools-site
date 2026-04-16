@@ -1,0 +1,26 @@
+﻿.binary-action-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.binary-label-top {
+  margin-top: 15px;
+}
+
+.binary-barcode-area {
+  margin-top: 18px;
+}
+
+.binary-block-label {
+  display: block;
+}
+
+.binary-btn-top {
+  margin-top: 10px;
+}
+
+.binary-upload-label {
+  display: block;
+  margin: 15px 0 5px;
+}
