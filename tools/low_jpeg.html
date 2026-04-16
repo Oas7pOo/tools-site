@@ -6,17 +6,18 @@ header_description: 将图片压缩为低质量 JPEG 风格并支持下载
 css_files:
   - /css/pages/low-jpeg.css
 ---
-<h2>鍥惧儚鍘嬬缉 - 褰╄壊鏂眰椋?/h2>
-<p>涓婁紶浠绘剰鍥剧墖锛屽帇缂╀负鏋佷綆璐ㄩ噺 JPEG 鍥惧儚锛屽舰鎴愮嫭鐗圭殑椹禌鍏嬩吉褰变笌鑹插僵閿欎綅缇庢劅銆?/p>
+
+<h2>图像压缩 - 彩色断层风格</h2>
+<p>上传任意图片，压缩为极低质量 JPEG 图像，形成独特的马赛克伪影与色彩错位美感。</p>
 
 <div class="container">
   <input type="file" id="imageInput" accept="image/*">
   <br><br>
-  <button onclick="compressImage()">鍘嬬缉骞剁敓鎴愰瑙?/button>
+  <button onclick="compressImage()">压缩并生成预览</button>
   <br><br>
   <canvas id="previewCanvas" class="low-preview-canvas"></canvas>
   <br>
-  <button id="downloadBtn" class="is-hidden">涓嬭浇鍘嬬缉鍥惧儚</button>
+  <button id="downloadBtn" class="is-hidden">下载压缩图像</button>
 </div>
 
 <script>
@@ -26,7 +27,7 @@ function compressImage() {
   const downloadBtn = document.getElementById('downloadBtn');
 
   if (!fileInput.files || fileInput.files.length === 0) {
-    alert('璇峰厛閫夋嫨涓€寮犲浘鐗?);
+    alert('请先选择一张图片！');
     return;
   }
 
@@ -57,16 +58,15 @@ function compressImage() {
           a.download = 'compressed-glitch.jpg';
           a.click();
         };
+
         downloadBtn.style.display = 'inline-block';
+        downloadBtn.classList.remove('is-hidden');
       };
     };
+
     img.src = e.target.result;
   };
+
   reader.readAsDataURL(file);
 }
 </script>
-
-
-
-
-

@@ -6,57 +6,60 @@ header_description: 支持文本与摩斯码互转，以及音频摩斯解析
 css_files:
   - /css/pages/morse-code.css
 ---
-<h2>鏂囨湰杞懇鏂瘑鐮佸伐鍏?/h2>
+
+<h2>文本转摩斯密码工具</h2>
 <div class="container">
-    <label for="plaintext">璇疯緭鍏ュ唴瀹癸紙涓枃灏嗚浆鎴愭嫾闊筹紝鑻辨枃鏁板瓧鏍囩偣鐩存帴澶勭悊锛岀┖鏍尖啋/锛夛細</label>
+    <label for="plaintext">请输入内容（中文将转成拼音，英文、数字、标点直接处理，空格转为 /）：</label>
     <textarea id="plaintext" rows="4" class="is-full-width"></textarea>
 
-    <button onclick="convertToMorse()" class="disable-on-click" >鐢熸垚鎽╂柉鏂囨湰鏂囦欢</button>
-    <button onclick="downloadMorseAudio()" class="disable-on-click" >鐢熸垚骞朵笅杞芥懇鏂煶棰?/button>
+    <button onclick="convertToMorse()" class="disable-on-click">生成摩斯文本文件</button>
+    <button onclick="downloadMorseAudio()" class="disable-on-click">生成并下载摩斯音频</button>
 </div>
 
 <hr>
-<h2>鎽╂柉缂栫爜瑙ｅ瘑</h2>
-<div class="container">
-    <p>鍙洿鎺ョ矘璐存懇鏂爜锛堢┖鏍间互<code>/</code>鍒嗛殧锛夛紝鎴栭€夋嫨涓婁紶闊抽锛?/p>
 
-    <!-- 鏂囨湰瑙ｅ瘑 -->
-    <label for="morseText">绮樿创鎽╂柉鐮?(绌烘牸=鏂滄潬/锛屽瓧绗﹂棿绌烘牸鍒嗛殧):</label>
+<h2>摩斯编码解密</h2>
+<div class="container">
+    <p>可直接粘贴摩斯码（单词间用 <code>/</code> 分隔），或选择上传音频：</p>
+
+    <label for="morseText">粘贴摩斯码（字符间空格分隔，单词间用 /）：</label>
     <textarea id="morseText" rows="3" class="is-full-width"></textarea>
-    <button onclick="decodeMorseText()" class="disable-on-click" >瑙ｅ瘑鍥炴嫾闊?鑻辨枃/鏁板瓧</button>
+    <button onclick="decodeMorseText()" class="disable-on-click">解码为拼音 / 英文 / 数字</button>
     <p id="decodedResult" class="morse-result"></p>
 
-    <!-- 闊抽瑙ｅ瘑 -->
-    <label for="morseAudioFile">鎴栦笂浼犳懇鏂煶棰戞枃浠讹細</label>
+    <label for="morseAudioFile">或上传摩斯音频文件：</label>
     <input type="file" id="morseAudioFile" accept=".wav,.mp3,audio/wav,audio/mp3,audio/*" />
+
     <div class="morse-audio-options">
-        <p>闊抽瑙ｆ瀽鍙傛暟锛?/p>
-        <label>妫€娴嬫晱鎰熷害 (0.1-1.0): <input type="range" id="sensitivity" min="0.1" max="1.0" step="0.1" value="0.2"></label>
+        <p>音频解析参数：</p>
+        <label>
+            检测灵敏度（0.1 - 1.0）:
+            <input type="range" id="sensitivity" min="0.1" max="1.0" step="0.1" value="0.2">
+        </label>
         <span id="sensitivityValue">0.2</span>
     </div>
-    <button onclick="decodeMorseAudio()" class="disable-on-click" >瑙ｆ瀽闊抽鏂囦欢</button>
+
+    <button onclick="decodeMorseAudio()" class="disable-on-click">解析音频文件</button>
     <p id="audioDecodeResult" class="morse-result"></p>
 </div>
-
 
 <script src="../js/pinyin_data.js"></script>
 <script src="../js/pinyin_processor.js"></script>
 <script>
 /***************************************************
- * 1) 姹夊瓧 鈫?鎷奸煶
+ * 1) 汉字 -> 拼音
  ***************************************************/
-    // 浣跨敤鍏ㄥ眬鍙橀噺浠ｆ浛import锛岀‘淇滺TML涓殑onclick浜嬩欢鑳借闂埌鍑芥暟
-    const pinyinConverter = new window.PinyinConverter();
+const pinyinConverter = new window.PinyinConverter();
 
-    function convertChineseToPinyin(str) {
-        return pinyinConverter.convert(str)
-            .toLowerCase() // 缁熶竴杞皬鍐?
-            .replace(/\s+/g, ' '); // 鏍囧噯鍖栫┖鏍?
-    }
+function convertChineseToPinyin(str) {
+    return pinyinConverter.convert(str)
+        .toLowerCase()          // 统一转小写
+        .replace(/\s+/g, ' ');  // 标准化空格
+}
 
 /***************************************************
- * 2) 鎷奸煶/鑻辨枃/鏁板瓧/鏍囩偣 鈫?鎽╂柉鐮?
- *    姝ゅ绌烘牸 => "/"
+ * 2) 拼音 / 英文 / 数字 / 标点 -> 摩斯码
+ *    空格 => "/"
  ***************************************************/
 const morseMap = {
   'A': '.-',    'B': '-...',  'C': '-.-.',  'D': '-..',
@@ -80,46 +83,45 @@ const morseMap = {
 
 function stringToMorse(str) {
   const result = [];
+
   for (let ch of str) {
     if (ch === ' ') {
-      // 绌烘牸 => '/'
       result.push('/');
       continue;
     }
+
     const upperC = ch.toUpperCase();
+
     if (morseMap[upperC]) {
       result.push(morseMap[upperC]);
-    }
-    else if (/^[A-Z0-9]$/.test(upperC)) {
-      // 鑻ユ槸鑻辨暟瀛椾絾娌℃槧灏勪笂 => '?'
+    } else if (/^[A-Z0-9]$/.test(upperC)) {
       result.push('?');
-    }
-    else {
-      // 鍏跺畠瀛楃(濡傛嫾闊崇殑 'n','i') => 鍐嶅仛鎷嗗垎鎴栫敤 '?'
-      // 姝ゅ绠€鍖栵細涓€涓瓧绗?=> 涓€涓?'?'
+    } else {
       result.push('?');
     }
   }
-  // 鐢ㄧ┖鏍煎垎闅斾笉鍚屽瓧绗︾殑鎽╂柉
+
   return result.join(' ');
 }
 
 /***************************************************
- * 3) 灏嗙敤鎴疯緭鍏ユ枃鏈?-> 鎷奸煶 -> 鎽╂柉锛屼笅杞絫xt
+ * 3) 用户输入文本 -> 拼音 -> 摩斯码，并下载 txt
  ***************************************************/
-// 灏嗗嚱鏁版毚闇插埌鍏ㄥ眬window瀵硅薄锛屼娇鍏跺彲浠ヨHTML涓殑onclick浜嬩欢璋冪敤
 window.convertToMorse = function() {
     const input = document.getElementById('plaintext').value.trim();
     if (!input) {
-        alert("璇疯緭鍏ヨ杞崲鐨勬枃鏈?);
+        alert("请输入要转换的文本！");
         return;
     }
-    console.log("杈撳叆鏂囨湰:", input);
+
+    console.log("输入文本:", input);
+
     const pinyinStr = convertChineseToPinyin(input);
-    console.log("杞崲鍚庣殑鎷奸煶:", pinyinStr);
+    console.log("转换后的拼音:", pinyinStr);
+
     const morseStr = stringToMorse(pinyinStr);
-    console.log("鐢熸垚鐨勬懇鏂爜:", morseStr);
-    
+    console.log("生成的摩斯码:", morseStr);
+
     const blob = new Blob([morseStr], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -127,43 +129,38 @@ window.convertToMorse = function() {
     a.download = `morse_${Date.now()}.txt`;
     a.click();
     URL.revokeObjectURL(url);
-}
-
-
+};
 
 /***************************************************
- * 4) 鐢熸垚鎽╂柉闊抽(绌烘牸 => "/" => 鏇撮暱闈欓煶)
+ * 4) 生成摩斯音频（空格 => "/" => 更长静音）
  ***************************************************/
-// 灏嗗嚱鏁版毚闇插埌鍏ㄥ眬window瀵硅薄
 window.downloadMorseAudio = async function() {
   const input = document.getElementById('plaintext').value.trim();
   if (!input) {
-    alert("璇疯緭鍏ヨ杞崲鐨勬枃鏈?);
+    alert("请输入要转换的文本！");
     return;
   }
+
   const pinyinStr = convertChineseToPinyin(input);
   const morseStr = stringToMorse(pinyinStr);
 
-  // 鎷嗗垎鎴愬瓧绗?鐢ㄧ┖鏍煎垎闅?. '.' => 鐭摂, '-' => 闀垮摂, 鍏朵綑 => '?'
-  // 濡傛灉閬囧埌 '/', 浠ｈ〃绌烘牸 => 棰濆闀块潤闊?
   const context = new (window.AudioContext || window.webkitAudioContext)();
 
-  const dotDur = 0.1;    // 鐐规椂闀?
-  const dashDur = 0.3;   // 妯椂闀?
-  const gapSym = 0.1;    // 鍚屽瓧绗﹀唴绗﹀彿闂撮殧
-  const gapChar = 0.2;   // 瀛楃闂撮棿闅?
-  const gapSpace = 0.6;  // 绌烘牸(鈥?鈥?鐨勯潤闊?
+  const dotDur = 0.1;    // 点时长
+  const dashDur = 0.3;   // 划时长
+  const gapSym = 0.1;    // 同一字符内符号间隔
+  const gapChar = 0.2;   // 字符间间隔
+  const gapSpace = 0.6;  // 单词间静音
 
   const tokens = morseStr.split(' ');
 
   let totalTime = 0;
   for (let t of tokens) {
     if (t === '/') {
-      // 绌烘牸 => 浠呯敤鏇撮暱闈欓煶
       totalTime += gapSpace;
       continue;
     }
-    // 鏅€氬瓧绗?
+
     for (let ch of t) {
       totalTime += (ch === '.') ? dotDur : (ch === '-' ? dashDur : dotDur);
       totalTime += gapSym;
@@ -172,32 +169,32 @@ window.downloadMorseAudio = async function() {
   }
 
   const sampleRate = context.sampleRate;
-  const buffer = context.createBuffer(1, sampleRate * totalTime, sampleRate);
+  const buffer = context.createBuffer(1, Math.ceil(sampleRate * totalTime), sampleRate);
   const channelData = buffer.getChannelData(0);
 
   let currentSample = 0;
-  function writeBeep(durSec, volume=0.3) {
+
+  function writeBeep(durSec, volume = 0.3) {
     const length = Math.floor(durSec * sampleRate);
-    const freq = 600; // 600Hz
-    for (let i = 0; i < length; i++) {
-      channelData[currentSample++] = volume * Math.sin(2*Math.PI * freq * (i/sampleRate));
+    const freq = 600;
+    for (let i = 0; i < length && currentSample < channelData.length; i++) {
+      channelData[currentSample++] = volume * Math.sin(2 * Math.PI * freq * (i / sampleRate));
     }
   }
+
   function writeSilence(durSec) {
     const length = Math.floor(durSec * sampleRate);
-    for (let i=0; i<length; i++){
+    for (let i = 0; i < length && currentSample < channelData.length; i++) {
       channelData[currentSample++] = 0;
     }
   }
 
-  // 鐢熸垚娉㈠舰
   for (let t of tokens) {
     if (t === '/') {
-      // 绌烘牸 => 鏇撮暱闈欓煶
       writeSilence(gapSpace);
       continue;
     }
-    // 鏅€氬瓧绗?
+
     for (let ch of t) {
       if (ch === '.') {
         writeBeep(dotDur);
@@ -206,15 +203,12 @@ window.downloadMorseAudio = async function() {
         writeBeep(dashDur);
         writeSilence(gapSym);
       } else {
-        // '?'
-        writeBeep(dotDur, 0);
         writeSilence(gapSym);
       }
     }
     writeSilence(gapChar);
   }
 
-  // 灏佽 WAV
   const wavData = encodeWAV(buffer, sampleRate);
   const blob = new Blob([wavData], { type: 'audio/wav' });
   const url = URL.createObjectURL(blob);
@@ -223,9 +217,9 @@ window.downloadMorseAudio = async function() {
   a.download = `morse_audio_${Date.now()}.wav`;
   a.click();
   URL.revokeObjectURL(url);
-}
+};
 
-function encodeWAV(buffer, sampleRate=44100) {
+function encodeWAV(buffer, sampleRate = 44100) {
   const channelData = buffer.getChannelData(0);
   const numFrames = channelData.length;
   const numChannels = 1;
@@ -233,108 +227,107 @@ function encodeWAV(buffer, sampleRate=44100) {
 
   const byteRate = (sampleRate * numChannels * bitsPerSample) / 8;
   const blockAlign = (numChannels * bitsPerSample) / 8;
-  const dataSize = numFrames * numChannels * (bitsPerSample/8);
+  const dataSize = numFrames * numChannels * (bitsPerSample / 8);
   const bufferSize = 44 + dataSize;
   const wavBuffer = new ArrayBuffer(bufferSize);
   const view = new DataView(wavBuffer);
 
   let offset = 0;
-  writeString(view, offset, 'RIFF'); offset+=4;
-  view.setUint32(offset, 36+dataSize, true); offset+=4;
-  writeString(view, offset, 'WAVE'); offset+=4;
+  writeString(view, offset, 'RIFF'); offset += 4;
+  view.setUint32(offset, 36 + dataSize, true); offset += 4;
+  writeString(view, offset, 'WAVE'); offset += 4;
 
-  writeString(view, offset, 'fmt '); offset+=4;
-  view.setUint32(offset, 16, true); offset+=4;
-  view.setUint16(offset, 1, true); offset+=2;
-  view.setUint16(offset, numChannels, true); offset+=2;
-  view.setUint32(offset, sampleRate, true); offset+=4;
-  view.setUint32(offset, byteRate, true); offset+=4;
-  view.setUint16(offset, blockAlign, true); offset+=2;
-  view.setUint16(offset, bitsPerSample, true); offset+=2;
+  writeString(view, offset, 'fmt '); offset += 4;
+  view.setUint32(offset, 16, true); offset += 4;
+  view.setUint16(offset, 1, true); offset += 2;
+  view.setUint16(offset, numChannels, true); offset += 2;
+  view.setUint32(offset, sampleRate, true); offset += 4;
+  view.setUint32(offset, byteRate, true); offset += 4;
+  view.setUint16(offset, blockAlign, true); offset += 2;
+  view.setUint16(offset, bitsPerSample, true); offset += 2;
 
-  writeString(view, offset, 'data'); offset+=4;
-  view.setUint32(offset, dataSize, true); offset+=4;
+  writeString(view, offset, 'data'); offset += 4;
+  view.setUint32(offset, dataSize, true); offset += 4;
 
-  for (let i=0; i<channelData.length; i++){
+  for (let i = 0; i < channelData.length; i++) {
     const s = Math.max(-1, Math.min(1, channelData[i]));
-    const val = s<0 ? s*0x8000 : s*0x7FFF;
+    const val = s < 0 ? s * 0x8000 : s * 0x7FFF;
     view.setInt16(offset, val, true);
-    offset+=2;
+    offset += 2;
   }
 
   return wavBuffer;
 
   function writeString(dv, pos, str) {
-    for (let i=0; i<str.length; i++){
-      dv.setUint8(pos+i, str.charCodeAt(i));
+    for (let i = 0; i < str.length; i++) {
+      dv.setUint8(pos + i, str.charCodeAt(i));
     }
   }
 }
 
 /***************************************************
- * 5) 鎽╂柉瑙ｅ瘑锛氳嫢閬?"/" 鍒欒繕鍘熶负绌烘牸
+ * 5) 摩斯解密：若遇到 "/" 则还原为空格
  ***************************************************/
 const morseReverseMap = {};
 for (let c in morseMap) {
-  morseReverseMap[morseMap[c]] = c; // ".-" => "A"
+  morseReverseMap[morseMap[c]] = c;
 }
 
-// 灏嗗嚱鏁版毚闇插埌鍏ㄥ眬window瀵硅薄
 window.decodeMorseText = function() {
   const input = document.getElementById('morseText').value.trim();
   if (!input) {
-    alert("璇风矘璐存懇鏂爜鏂囨湰");
+    alert("请粘贴摩斯码文本");
     return;
   }
-  // 浠ョ┖鏍煎垎闅?=> ['-.--','---','..-','/',...]
+
   const tokens = input.split(/\s+/);
   let result = "";
+
   for (let t of tokens) {
     if (t === '/') {
-      // 鏂滄潬浠ｈ〃绌烘牸
       result += ' ';
     } else if (morseReverseMap[t]) {
       result += morseReverseMap[t];
     } else {
-      // 鑻ヤ笉瀛樺湪鏄犲皠锛屽垯鐢?"?" 鍗犱綅
       result += '?';
     }
   }
-  document.getElementById('decodedResult').textContent = "瑙ｇ爜缁撴灉: " + result;
-}
+
+  document.getElementById('decodedResult').textContent = "解码结果: " + result;
+};
 
 /***************************************************
- * 6) 鎽╂柉闊抽瑙ｆ瀽鍔熻兘
+ * 6) 摩斯音频解析功能
  ***************************************************/
-// 灏嗗嚱鏁版毚闇插埌鍏ㄥ眬window瀵硅薄
 window.decodeMorseAudio = async function() {
   const fileInput = document.getElementById('morseAudioFile');
   const resultEl = document.getElementById('audioDecodeResult');
+
   if (!fileInput.files.length) {
-    alert("璇烽€夋嫨闊抽鏂囦欢");
+    alert("请选择音频文件");
     return;
   }
-  resultEl.textContent = "姝ｅ湪鍒嗘瀽闊抽锛岃绋嶅€?..";
+
+  resultEl.textContent = "正在分析音频，请稍候...";
+
   try {
     const file = fileInput.files[0];
     const arrayBuf = await file.arrayBuffer();
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     const audioBuf = await audioCtx.decodeAudioData(arrayBuf);
 
-    // 鑾峰彇涓诲０閬撴暟鎹?
     const data = audioBuf.getChannelData(0);
     const sampleRate = audioBuf.sampleRate;
 
-    // 1. 鑳介噺妫€娴嬩紭鍖栵細浣跨敤RMS璁＄畻鍜屾眽瀹佺獥骞虫粦
+    // 1. 能量检测：使用 RMS + Hann 窗平滑
     const windowSize = Math.floor(0.01 * sampleRate); // 10ms
     let env = [];
-    
-    // 鍒涘缓姹夊畞绐楃敤浜庡钩婊?
+
     const hanningWindow = new Float32Array(windowSize);
     for (let i = 0; i < windowSize; i++) {
       hanningWindow[i] = 0.5 * (1 - Math.cos(2 * Math.PI * i / (windowSize - 1)));
     }
-    
+
     for (let i = 0; i < data.length; i += windowSize) {
       let sumSq = 0;
       let count = 0;
@@ -343,161 +336,127 @@ window.decodeMorseAudio = async function() {
         sumSq += weightedSample * weightedSample;
         count++;
       }
-      // 璁＄畻RMS (鍧囨柟鏍? 浣滀负鑳介噺鎸囨爣
       env.push(Math.sqrt(sumSq / count));
     }
 
-    // 2. 鑷€傚簲闃堝€兼娴嬶紝鍔犲叆鐢ㄦ埛鍙皟鑺傜殑鏁忔劅搴﹀弬鏁?
+    // 2. 自适应阈值检测
     const sensitivity = parseFloat(document.getElementById('sensitivity').value) || 0.2;
     const maxEnv = Math.max(...env);
     const threshold = maxEnv * sensitivity;
-    let isBeep = env.map(v => v > threshold ? 1 : 0);
+    const isBeep = env.map(v => v > threshold ? 1 : 0);
 
-    // 3. 鎸夋湁澹?闈欓煶鍒嗙粍锛岀粺璁℃瘡娈甸暱搴︼紙浠?0ms涓哄崟浣嶏級
+    // 3. 按有声 / 静音分组，统计每段长度
     let segs = [];
     let cur = isBeep[0], len = 1;
     for (let i = 1; i < isBeep.length; i++) {
       if (isBeep[i] === cur) {
         len++;
       } else {
-        segs.push({type: cur ? 'beep' : 'silence', len});
-        cur = isBeep[i]; len = 1;
+        segs.push({ type: cur ? 'beep' : 'silence', len });
+        cur = isBeep[i];
+        len = 1;
       }
     }
-    segs.push({type: cur ? 'beep' : 'silence', len});
+    segs.push({ type: cur ? 'beep' : 'silence', len });
 
-    // 4. 鏀硅繘鐨勬懇灏旀柉鐢电爜鏍囧噯鏃堕棿闂撮殧绠楁硶
-    // 缁熻鎵€鏈?beep 娈?闈欓煶娈电殑鏃堕暱
     const beepLens = segs.filter(s => s.type === 'beep').map(s => s.len);
     const silLens = segs.filter(s => s.type === 'silence').map(s => s.len);
-    
+
     if (beepLens.length === 0) {
-      throw new Error("鏈娴嬪埌鏈夋晥鐨勬懇鏂爜淇″彿");
+      throw new Error("未检测到有效的摩斯码信号");
     }
 
-    // 涓ユ牸鎸夌収鎽╁皵鏂數鐮佹爣鍑嗘椂闂撮棿闅旓細
-    // 1t = 鐐逛俊鍙烽暱搴?
-    // - 鐐?路)锛?t
-    // - 鍒?-)锛?t
-    // - 绗﹀彿闂撮棿闅旓細1t
-    // - 瀛楃闂撮棿闅旓細3t
-    // - 鍗曡瘝闂撮棿闅旓細7t
-    
-    // 璁＄畻鐐归暱搴︼細鍙栨渶灏忕殑beep娈典綔涓哄熀鍑?t
+    // 4. 估算时间单位
     beepLens.sort((a, b) => a - b);
-    const dotLen = beepLens[0]; // 1t
-    
-    // 鍒掗暱搴︿负鐐圭殑3鍊?(3t)
+    const dotLen = beepLens[0];
     const dashLenThresh = dotLen * 3;
 
-    // 闈欓煶褰掔被锛氫弗鏍兼寜鐓ф爣鍑嗘椂闂撮棿闅?
     silLens.sort((a, b) => a - b);
-    
-    // 绗﹀彿闂撮棿闅旓細1t (浣跨敤鏈€灏忕殑闈欓煶娈典綔涓哄弬鑰?
-    const symbolGapLen = Math.min(...silLens);
-    
-    // 瀛楃闂撮棿闅旓細3t (鏍囧噯瑕佹眰)
     const charGapThresh = dotLen * 3;
-    
-    // 鍗曡瘝闂撮棿闅旓細7t (鏍囧噯瑕佹眰)
     const wordGapThresh = dotLen * 7;
 
-    // 5. 杩樺師鎽╂柉瀛楃涓?- 鏀硅繘鐗堢‘淇濇纭敓鎴愭爣鍑嗘懇鏂爜鏍煎紡
+    // 5. 还原摩斯码字符串
     let morse = '';
     let lastType = null;
-    
+
     for (let seg of segs) {
       if (seg.type === 'beep') {
-        // 娣诲姞鐐规垨鍒?
-        if (seg.len < dashLenThresh) {
-          morse += '.';
-        } else {
-          morse += '-';
-        }
+        morse += seg.len < dashLenThresh ? '.' : '-';
         lastType = 'beep';
       } else {
-        // 闈欓煶闂撮殧澶勭悊
-        if (lastType === 'beep') { // 鍙湪澹伴煶鍚庢坊鍔犻棿闅?
+        if (lastType === 'beep') {
           if (seg.len < charGapThresh) {
-            // 绗﹀彿闂撮棿闅旓細涓嶉渶瑕佹坊鍔犻澶栧瓧绗?
+            // 同一字符内间隔，不加额外符号
           } else if (seg.len < wordGapThresh) {
-            morse += ' '; // 瀛楃闂撮棿闅?
+            morse += ' ';
           } else {
-            morse += ' / '; // 鍗曡瘝闂撮棿闅?
+            morse += ' / ';
           }
         }
         lastType = 'silence';
       }
     }
-    
-    // 娓呯悊骞舵爣鍑嗗寲鏈€缁堢殑鎽╂柉鐮佸瓧绗︿覆
-    morse = morse.trim().replace(/\s+/g, ' ').replace(/\s\/\s/g, ' / ');
 
-    // 6. 鏀硅繘鐨勬懇鏂爜瑙ｇ爜閫昏緫
-    // 娓呯悊澶氫綑绌烘牸骞舵爣鍑嗗寲鏍煎紡
+    morse = morse.trim().replace(/\s+/g, ' ').replace(/\s\/\s/g, ' / ');
     morse = morse.replace(/\s+/g, ' ').trim();
-    
-    // 涓轰簡璋冭瘯锛屾墦鍗拌缁嗕俊鎭埌鎺у埗鍙?
-    console.log('鍘熷鎽╂柉鐮佸瓧绗︿覆:', morse);
-    console.log('鎽╂柉鍙嶅悜鏄犲皠琛ㄧず渚?', JSON.stringify({'.': morseReverseMap['.'], '-': morseReverseMap['-'], '.-': morseReverseMap['.-']}));
-    
-    // 姝ｇ‘澶勭悊鎽╂柉鐮佸埌鏂囨湰鐨勮浆鎹?
+
+    console.log('原始摩斯码字符串:', morse);
+    console.log('摩斯反向映射示例:', JSON.stringify({
+      '.': morseReverseMap['.'],
+      '-': morseReverseMap['-'],
+      '.-': morseReverseMap['.-']
+    }));
+
     let tokens = morse.split(' ');
     let result = "";
-    
-    console.log('鍒嗗壊鍚庣殑鎽╂柉鐮佹爣璁?', tokens);
-    
+
+    console.log('分割后的摩斯码标记:', tokens);
+
     for (let t of tokens) {
       if (t === '/' || t === '') {
         result += ' ';
-        console.log('澶勭悊鍒嗛殧绗?', t, '娣诲姞绌烘牸');
+        console.log('处理分隔符:', t, '添加空格');
       } else if (morseReverseMap[t]) {
         result += morseReverseMap[t];
-        console.log('澶勭悊鎽╂柉鐮?', t, '鏄犲皠鍒?', morseReverseMap[t]);
+        console.log('处理摩斯码:', t, '映射到:', morseReverseMap[t]);
       } else {
-        // 濡傛灉娌℃湁鎵惧埌绮剧‘鍖归厤锛屽皾璇曚慨澶嶅父瑙佺殑瑙ｆ瀽閿欒
         let fixedToken = t;
-        
-        // 灏濊瘯淇鍙兘鐨勭紪鐮侀棶棰?
+
         if (fixedToken.includes('\u00b7')) {
           fixedToken = fixedToken.replace(/\u00b7/g, '.');
         }
-        
-        // 鍐嶆灏濊瘯鏄犲皠淇鍚庣殑鏍囪
+
         if (morseReverseMap[fixedToken]) {
           result += morseReverseMap[fixedToken];
-          console.log('淇鎽╂柉鐮?', t, '涓?', fixedToken, '鏄犲皠鍒?', morseReverseMap[fixedToken]);
+          console.log('修复摩斯码:', t, '为:', fixedToken, '映射到:', morseReverseMap[fixedToken]);
         } else {
           result += '?';
-          console.log('鏈瘑鍒殑鎽╂柉鐮?', t);
+          console.log('未识别的摩斯码:', t);
         }
       }
     }
-    
-    // 鏄剧ず鏇磋缁嗙殑缁撴灉淇℃伅
-    resultEl.textContent = "闊抽瑙ｇ爜锛? + result + "\n[鍘熷鎽╂柉鐮? " + morse + "]\n[杞崲鍚庣殑鏂囨湰: " + result + "]\n鎻愮ず: 鑻ヨВ鏋愪笉鍑嗙‘锛屽彲灏濊瘯璋冩暣鏁忔劅搴︽粦鍧?;
-  } catch (err) {
-    console.error('闊抽瑙ｆ瀽閿欒:', err);
-    resultEl.textContent = "闊抽瑙ｆ瀽澶辫触: " + (err.message || "鏈煡閿欒");
-  }
-}
 
-// 娣诲姞鏁忔劅搴︽粦鍧椾簨浠剁洃鍚?
+    resultEl.textContent =
+      "音频解码: " + result +
+      "\n[原始摩斯码: " + morse + "]" +
+      "\n[转换后的文本: " + result + "]" +
+      "\n提示：若解码不准确，可尝试调整灵敏度滑块。";
+
+  } catch (err) {
+    console.error('音频解析错误:', err);
+    resultEl.textContent = "音频解析失败: " + (err.message || "未知错误");
+  }
+};
+
+// 灵敏度滑块数值显示
 window.addEventListener('load', function() {
   const sensitivitySlider = document.getElementById('sensitivity');
   const sensitivityValue = document.getElementById('sensitivityValue');
-  
+
   if (sensitivitySlider && sensitivityValue) {
     sensitivitySlider.addEventListener('input', function() {
       sensitivityValue.textContent = this.value;
     });
   }
 });
-
 </script>
-
-
-
-
-
-
