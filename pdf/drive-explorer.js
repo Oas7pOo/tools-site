@@ -37,12 +37,29 @@ class DriveExplorer {
   async init() {
     try {
       this.initDOMElements();
-      await this.initGoogleAPI();
-      await this.loadDriveTree();
+      
+      // 设定一个 10 秒（10000 毫秒）的超时限制
+      const timeout = 5*60*1000; 
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => {
+          reject(new Error(`连接 Google Drive 超时（${timeout / 1000}秒无响应）`));
+        }, timeout);
+      });
+
+      // 将原来的 API 初始化和加载过程包裹在一个异步函数中
+      const loadProcess = async () => {
+        await this.initGoogleAPI();
+        await this.loadDriveTree();
+      };
+
+      // 使用 Promise.race 进行竞速：如果加载过程超过 10 秒，则直接抛出超时异常
+      await Promise.race([loadProcess(), timeoutPromise]);
+
       this.isInitialized = true;
     } catch (err) {
       console.error('Drive Explorer 初始化失败:', err);
-      this.showError('初始化失败，请使用科学上网工具后重新尝试，或者加群753698934。');
+      // 触发 catch，在页面上显示错误信息
+      this.showError(`初始化失败，请使用科学上网工具后重新尝试，或者加群753698934。<br><small>(${err.message})</small>`);
     }
   }
 
